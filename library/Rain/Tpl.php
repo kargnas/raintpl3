@@ -75,7 +75,7 @@ class Tpl {
         extract($this->var);
         // Merge local and static configurations
         $this->config = $this->objectConf + static::$conf;
-        
+
         ob_start();
         require $this->checkTemplate($templateFilePath);
         $html = ob_get_clean();
@@ -256,6 +256,8 @@ class Tpl {
      * @return string: full filepath that php must use to include
      */
     protected function checkTemplate($template) {
+        static $parsingTime = 0;
+
         // set filename
         $templateName = basename($template);
         $templateBasedir = strpos($template, DIRECTORY_SEPARATOR) ? dirname($template) . DIRECTORY_SEPARATOR : null;
@@ -271,8 +273,13 @@ class Tpl {
 
         // Compile the template if the original has been updated
         if ($this->config['debug'] || !file_exists($parsedTemplateFilepath) || ( filemtime($parsedTemplateFilepath) < filemtime($templateFilepath) )) {
+            $time = microtime(true);
             $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
             $parser->compileFile($templateName, $templateBasedir, $templateDirectory, $templateFilepath, $parsedTemplateFilepath);
+            $parsingTime += microtime(true) - $time;
+            if (function_exists('PLog')) {
+                PLog("TPL Parsed and compiled.. ({$template}) (총 {$parsingTime}초)", ['class' => $this, 'method' => __METHOD__, 'time' => $time]);
+            }
         }
         return $parsedTemplateFilepath;
     }
