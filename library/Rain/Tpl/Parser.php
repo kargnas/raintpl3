@@ -619,6 +619,8 @@ class Parser {
             }
         }
 
+        $html = str_replace('?><?php', ' ', $parsedCode);
+
         // Execute plugins, after_parse
         $context->code = $parsedCode;
         $this->getPlugins()->run('afterParse', $context);
