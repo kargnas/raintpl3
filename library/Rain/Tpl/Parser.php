@@ -16,8 +16,8 @@ class Parser {
     public $var = array();
 
     protected $templateInfo = array(),
-              $config = array(),
-              $objectConf = array();
+        $config = array(),
+        $objectConf = array();
 
     /**
      * Plugin container
@@ -80,10 +80,8 @@ class Parser {
         'syslog', 'xmlrpc_entity_decode'
     );
 
-    public function __construct($config, $objectConf, $conf, $plugins, $registered_tags) {
+    public function __construct($config, $plugins, $registered_tags) {
         $this->config = $config;
-        $this->objectConf = $objectConf;
-        static::$conf = $conf;
         static::$plugins = $plugins;
         static::$registered_tags = $registered_tags;
     }
@@ -146,7 +144,7 @@ class Parser {
         return $parsedTemplateFilepath;
     }
 
-		/**
+    /**
      * Compile a string if necessary
      *
      * @param string $string: RainTpl template string to compile
@@ -190,7 +188,7 @@ class Parser {
         $fp = fopen($templateFilepath, "r");
 
         // lock the file
-        if (flock($fp, LOCK_SH)) {
+        if (flock($fp, LOCK_EX)) {
 
             // save the filepath in the info
             $this->templateInfo['template_filepath'] = $templateFilepath;
@@ -207,8 +205,8 @@ class Parser {
 
             // xml re-substitution
             $code = preg_replace_callback("/##XML(.*?)XML##/s", function( $match ) {
-                        return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
-                    }, $code);
+                    return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
+                }, $code);
 
             $parsedCode = $this->compileTemplate($code, $isString = false, $templateBasedir, $templateDirectory, $templateFilepath);
             $parsedCode = "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
@@ -261,8 +259,8 @@ class Parser {
 
             // xml re-substitution
             $code = preg_replace_callback("/##XML(.*?)XML##/s", function( $match ) {
-                        return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
-                    }, $code);
+                    return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
+                }, $code);
 
             $parsedCode = $this->compileTemplate($code, $isString = true, $templateBasedir, $templateDirectory = null, $templateFilepath);
 
@@ -300,11 +298,11 @@ class Parser {
 
         // Execute plugins, before_parse
         $context = $this->getPlugins()->createContext(array(
-            'code' => $code,
-            'template_basedir' => $templateBasedir,
-            'template_filepath' => $templateFilepath,
-            'conf' => $this->config,
-        ));
+                'code' => $code,
+                'template_basedir' => $templateBasedir,
+                'template_filepath' => $templateFilepath,
+                'conf' => $this->config,
+            ));
 
         $this->getPlugins()->run('beforeParse', $context);
         $code = $context->code;
@@ -334,7 +332,7 @@ class Parser {
         // if the template is not empty
         if ($codeSplit)
 
-        //read all parsed code
+            //read all parsed code
             foreach ($codeSplit as $html) {
 
                 //close ignore tag
@@ -367,11 +365,17 @@ class Parser {
 
                     //get the folder of the actual template
                     $actualFolder = $templateDirectory;
-                    foreach($this->config['tpl_dir'] as $tpl) {
-                        if (substr($actualFolder, 0, strlen($tpl)) == $tpl) {
-                            $actualFolder = substr($actualFolder, strlen($tpl));
+
+                    if (is_array($this->config['tpl_dir'])) {
+                        foreach($this->config['tpl_dir'] as $tpl) {
+                            if (substr($actualFolder, 0, strlen($tpl)) == $tpl) {
+                                $actualFolder = substr($actualFolder, strlen($tpl));
+                            }
                         }
+                    } elseif (substr($actualFolder, 0, strlen($this->config['tpl_dir'])) == $this->config['tpl_dir']) {
+                            $actualFolder = substr($actualFolder, strlen($this->config['tpl_dir']));
                     }
+
 
                     //get the included template
                     if (strpos($matches[1], '$') !== false) {
@@ -557,7 +561,7 @@ class Parser {
 
                 //ternary
                 elseif (preg_match($tagMatch['ternary'], $html, $matches)) {
-	                $parsedCode .= "<?php echo " . '(' . $this->varReplace($matches[1], $loopLevel, $escape = TRUE, $echo = FALSE) . '?' . $this->varReplace($matches[2], $loopLevel, $escape = TRUE, $echo = FALSE) . ':' . $this->varReplace($matches[3], $loopLevel, $escape = TRUE, $echo = FALSE) . ')' . "; ?>";
+                    $parsedCode .= "<?php echo " . '(' . $this->varReplace($matches[1], $loopLevel, $escape = TRUE, $echo = FALSE) . '?' . $this->varReplace($matches[2], $loopLevel, $escape = TRUE, $echo = FALSE) . ':' . $this->varReplace($matches[3], $loopLevel, $escape = TRUE, $echo = FALSE) . ')' . "; ?>";
                 }
 
                 //variables
@@ -574,7 +578,7 @@ class Parser {
 
                 // registered tags
                 else {
- 
+
                     $found = FALSE;
                     foreach (static::$registered_tags as $tags => $array) {
                         if (preg_match_all('/' . $array['parse'] . '/', $html, $matches)) {
@@ -653,7 +657,7 @@ class Parser {
 
                 // escape character
                 if ($this->config['auto_escape'] && $escape)
-                //$html = "htmlspecialchars( $html )";
+                    //$html = "htmlspecialchars( $html )";
                     $html = "htmlspecialchars( $html, ENT_COMPAT, '" . $this->config['charset'] . "', FALSE )";
 
                 // if is an assignment it doesn't add echo
@@ -693,14 +697,14 @@ class Parser {
 
     protected function blackList($html) {
 
-        if (!static::$conf['sandbox'] || !static::$black_list)
+        if (!$this->config['sandbox'] || !static::$black_list)
             return true;
 
-        if (empty(static::$conf['black_list_preg']))
-            static::$conf['black_list_preg'] = '#[\W\s]*' . implode('[\W\s]*|[\W\s]*', static::$black_list) . '[\W\s]*#';
+        if (empty($this->config['black_list_preg']))
+            $this->config['black_list_preg'] = '#[\W\s]*' . implode('[\W\s]*|[\W\s]*', static::$black_list) . '[\W\s]*#';
 
         // check if the function is in the black list (or not in white list)
-        if (preg_match(static::$conf['black_list_preg'], $html, $match)) {
+        if (preg_match($this->config['black_list_preg'], $html, $match)) {
 
             // find the line of the error
             $line = 0;
@@ -711,8 +715,8 @@ class Parser {
             // stop the execution of the script
             $e = new SyntaxException('Syntax ' . $match[0] . ' not allowed in template: ' . $this->templateInfo['template_filepath'] . ' at line ' . $line);
             throw $e->templateFile($this->templateInfo['template_filepath'])
-                    ->tag($match[0])
-                    ->templateLine($line);
+                ->tag($match[0])
+                ->templateLine($line);
 
             return false;
         }
@@ -728,6 +732,8 @@ class Parser {
         while( preg_match( '#\.\./#', $path ) ){
             $path = preg_replace('#\w+/\.\./#', '', $path );
         }
+        $path = str_replace("/", DIRECTORY_SEPARATOR, $path);
+
         return $path;
     }
 }

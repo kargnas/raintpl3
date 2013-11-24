@@ -16,7 +16,7 @@ class Tpl {
     public $var = array();
 
     protected $config = array(),
-              $objectConf = array();
+        $objectConf = array();
 
     /**
      * Plugin container
@@ -39,24 +39,6 @@ class Tpl {
         'sandbox' => true,
         'remove_comments' => false,
         'registered_tags' => array(),
-        'tags' => array(
-            'loop' => array('({loop.*?})', '/{loop="(?P<variable>\${0,1}[^"]*)"(?: as (?P<key>\$.*?)(?: => (?P<value>\$.*?)){0,1}){0,1}}/'),
-            'loop_close' => array('({\/loop})', '/{\/loop}/'),
-            'loop_break' => array('({break})', '/{break}/'),
-            'loop_continue' => array('({continue})', '/{continue}/'),
-            'if' => array('({if.*?})', '/{if="([^"]*)"}/'),
-            'elseif' => array('({elseif.*?})', '/{elseif="([^"]*)"}/'),
-            'else' => array('({else})', '/{else}/'),
-            'if_close' => array('({\/if})', '/{\/if}/'),
-            'noparse' => array('({noparse})', '/{noparse}/'),
-            'noparse_close' => array('({\/noparse})', '/{\/noparse}/'),
-            'ignore' => array('({ignore}|{\*)', '/{ignore}|{\*/'),
-            'ignore_close' => array('({\/ignore}|\*})', '/{\/ignore}|\*}/'),
-            'include' => array('({include.*?})', '/{include="([^"]*)"}/'),
-            'function' => array('({function.*?})', '/{function="([a-zA-Z_][a-zA-Z_0-9\:]*)(\(.*\)){0,1}"}/'),
-            'variable' => array('({\$.*?})', '/{(\$.*?)}/'),
-            'constant' => array('({#.*?})', '/{#(.*?)#{0,1}}/'),
-        )
     );
 
     // tags registered by the developers
@@ -83,9 +65,9 @@ class Tpl {
 
         // Execute plugins, before_parse
         $context = $this->getPlugins()->createContext(array(
-            'code' => $html,
-            'conf' => $this->config,
-        ));
+                'code' => $html,
+                'conf' => $this->config,
+            ));
         $this->getPlugins()->run('afterDraw', $context);
         $html = $context->code;
 
@@ -113,9 +95,9 @@ class Tpl {
 
         // Execute plugins, before_parse
         $context = $this->getPlugins()->createContext(array(
-            'code' => $html,
-            'conf' => $this->config,
-        ));
+                'code' => $html,
+                'conf' => $this->config,
+            ));
         $this->getPlugins()->run('afterDraw', $context);
         $html = $context->code;
 
@@ -293,8 +275,7 @@ class Tpl {
 
         // Compile the template if the original has been updated
         if ($this->config['debug'] || !file_exists($parsedTemplateFilepath) || ( filemtime($parsedTemplateFilepath) < filemtime($templateFilepath) )) {
-            $time = microtime(true);
-            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+            $parser = new Tpl\Parser($this->config, static::$plugins, static::$registered_tags);
             $parser->compileFile($templateName, $templateBasedir, $templateDirectory, $templateFilepath, $parsedTemplateFilepath);
             $parsingTime += microtime(true) - $time;
             if (function_exists('PLog')) {
@@ -321,8 +302,8 @@ class Tpl {
 
 
         // Compile the template if the original has been updated
-        if ($this->config['debug'] || !file_exists($parsedTemplateFilepath)) {            
-            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+        if ($this->config['debug'] || !file_exists($parsedTemplateFilepath)) {
+            $parser = new Tpl\Parser($this->config, static::$plugins, static::$registered_tags);
             $parser->compileString($templateName, $templateBasedir, $templateFilepath, $parsedTemplateFilepath, $string);
         }
 
