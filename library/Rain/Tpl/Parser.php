@@ -1,7 +1,5 @@
 <?php
-
 namespace Rain\Tpl;
-
 /**
  *  RainTPL
  *  --------
@@ -10,14 +8,26 @@ namespace Rain\Tpl;
  *
  *  @version 3.0 Alpha milestone: https://github.com/rainphp/raintpl3/issues/milestones?with_issues=no
  */
-class Parser {
-
+class Parser
+{
     // variables
     public $var = array();
 
     protected $templateInfo = array(),
-              $config = array(),
               $objectConf = array();
+
+    protected $config = array(
+        'ignore_single_quote' => true,
+    );
+
+    /**
+     * Temporary data for parser when running
+     *
+     * @var array
+     */
+    protected $tagData = array(
+
+    );
 
     /**
      * Plugin container
@@ -34,34 +44,57 @@ class Parser {
 
     // tags natively supported
     protected static $tags = array(
-        'loop' => array(
-            '({loop.*?})',
-            '/{loop="(?<variable>\${0,1}[^"]*)"(?: as (?<key>\$.*?)(?: => (?<value>\$.*?)){0,1}){0,1}}/'
-        ),
-        'loop_close' => array('({\/loop})', '/{\/loop}/'),
-        'loop_break' => array('({break})', '/{break}/'),
-        'loop_continue' => array('({continue})', '/{continue}/'),
+        'variable' => array('({\$.*?})', '/{(\$.*?)}/'), // RainTPL3.1
         'if' => array('({if.*?})', '/{if="([^"]*)"}/'),
         'elseif' => array('({elseif.*?})', '/{elseif="([^"]*)"}/'),
         'else' => array('({else})', '/{else}/'),
         'if_close' => array('({\/if})', '/{\/if}/'),
+        'function' => '({function.*?})', // RainTPL3.1
+        'functionDirect' => '({.*?\(.*?\).*?})',
+        'string' => '({".*?})',
+        // @TODO: {capture}
+        // @TODO: {block}
+        // @TODO: support for syntax "as $key => $value" in {loop} and {foreach}
+
+        'loop' => array( // RainTPL3.1
+            '({loop.*?})',
+            /*'/{loop="(?<variable>\${0,1}[^"]*)"(?: as (?<key>\$.*?)(?: => (?<value>\$.*?)){0,1}){0,1}}/'*/
+        ),
+        'foreach' => array( // RainTPL3.1
+            '({foreach.*?})',
+            /*'/{loop="(?<variable>\${0,1}[^"]*)"(?: as (?<key>\$.*?)(?: => (?<value>\$.*?)){0,1}){0,1}}/'*/
+        ),
+        'foreach_close' => array('({\/foreach})', '/{\/foreach}/'), // RainTPL3.1
+        'loop_close' => array('({\/loop})', '/{\/loop}/'), // RainTPL3.1
+        'loop_break' => array('({break})', '/{break}/'),
+        'loop_continue' => array('({continue})', '/{continue}/'),
+        'include' => array('({include.*?})', '/{include="([^"]*)"}/'),
         'autoescape' => array('({autoescape.*?})', '/{autoescape="([^"]*)"}/'),
         'autoescape_close' => array('({\/autoescape})', '/{\/autoescape}/'),
         'noparse' => array('({noparse})', '/{noparse}/'),
         'noparse_close' => array('({\/noparse})', '/{\/noparse}/'),
         'ignore' => array('({ignore}|{\*)', '/{ignore}|{\*/'),
         'ignore_close' => array('({\/ignore}|\*})', '/{\/ignore}|\*}/'),
-        'include' => array('({include.*?})', '/{include="([^"]*)"}/'),
-        'function' => array(
-            '({function.*?})',
-            '/{function="([a-zA-Z_][a-zA-Z_0-9\:]*)(\(.*\)){0,1}"}/'
-        ),
         'ternary' => array('({.[^{?]*?\?.*?\:.*?})', '/{(.[^{?]*?)\?(.*?)\:(.*?)}/'),
-        'variable' => array('({\$.*?})', '/{(\$.*?)}/'),
         'constant' => array('({#.*?})', '/{#(.*?)#{0,1}}/'),
     );
 
-    // black list of functions and variables
+    /**
+     * List of attached functions for parsing blocks
+     *
+     * Example: 'myTag' => array($object, 'methodName')
+     *
+     * @var array
+     */
+    public $blockParserCallbacks = array(
+
+    );
+
+    /**
+     * Black list of functions and variables
+     *
+     * @var array
+     */
     protected static $black_list = array(
         'exec', 'shell_exec', 'pcntl_exec', 'passthru', 'proc_open', 'system',
         'posix_kill', 'posix_setsid', 'pcntl_fork', 'posix_uname', 'php_uname',
@@ -80,7 +113,8 @@ class Parser {
         'syslog', 'xmlrpc_entity_decode'
     );
 
-    public function __construct($config, $objectConf, $conf, $plugins, $registered_tags) {
+    public function __construct($config, $objectConf, $conf, $plugins, $registered_tags)
+    {
         $this->config = $config;
         static::$plugins = $plugins;
         static::$registered_tags = $registered_tags;
@@ -111,8 +145,8 @@ class Parser {
         $fp = fopen($templateFilepath, "r");
 
         // lock the file
-        if (flock($fp, LOCK_SH)) {
-
+        if (flock($fp, LOCK_SH))
+        {
             // save the filepath in the info
             $this->templateInfo['template_filepath'] = $templateFilepath;
 
@@ -165,8 +199,8 @@ class Parser {
      * @param string $parsedTemplateFilepath: cache file where to save the template
      * @param string $code: code to compile
      */
-    public function compileString($templateName, $templateBasedir, $templateFilepath, $parsedTemplateFilepath, $code) {
-
+    public function compileString($templateName, $templateBasedir, $templateFilepath, $parsedTemplateFilepath, $code)
+    {
         // open the template
         $fp = fopen($parsedTemplateFilepath, "w");
 
@@ -212,12 +246,107 @@ class Parser {
     }
 
     /**
+     * Split code into parts that should contain {code} tags and HTML as separate elements
+     *
+     * @param string $code Input TPL code
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return array
+     */
+    protected function prepareCodeSplit($code)
+    {
+        $split = array();
+        $cursor = 0;
+        $current = 0;
+        $blockPositions = array();
+        $arrIndex = -1;
+        $lastBlockType = '';
+
+        while ($current !== false)
+        {
+            $current = strpos($code, '{', $cursor);
+
+            if ($current === false)
+                break;
+
+            $sChar = substr($code, $current + 1, 1);
+            $sCharMatch = (substr($code, $current + 1, 1) === ' ' || $sChar === "\t" || $sChar === "\n" || $sChar === "\r" || ($this->config['ignore_single_quote'] && $sChar === "'")); // condition that check if there is any space or special character after "{"
+
+            if ($current && !$sCharMatch)
+            {
+                /**
+                 * Template tags
+                 */
+                $currentEnding = strpos($code, '}', $current) + 1;
+
+                // before our {code} block
+                $split[] = substr($code, $cursor, ($current - $cursor)); $arrIndex++;
+
+                // our {code} block
+                $split[] = substr($code, $current, ($currentEnding - $current)); $arrIndex++;
+
+                $blockPositions[$arrIndex] = $current. '|' .($currentEnding - $current);
+                $cursor = $currentEnding;
+                $lastBlockType = 1;
+
+            } else {
+                /**
+                 * HTML & Javascript & JSON code
+                 */
+                $next = strpos($code, '{', $current + 1);
+
+                if (!$next)
+                    break;
+
+                // take all data to "{"
+                if ($sCharMatch)
+                {
+                    // divide into bigger blocks
+                    if ($lastBlockType === 1) {
+                        $split[] = substr($code, $cursor, ($current - $cursor));
+                        $arrIndex++;
+                    } else
+                        $split[$arrIndex] .= substr($code, $cursor, ($current - $cursor)); // append to existing block
+                }
+
+                // take all data after "{" until next "{"
+                if ($lastBlockType === 1)
+                {
+                    $split[] = substr($code, $current, ($next - $current));
+                    $arrIndex++;
+                } else
+                    $split[$arrIndex] .= substr($code, $current, ($next - $current)); // append to existing block
+
+                $cursor = $next;
+                $lastBlockType = 0;
+            }
+        }
+
+        // the rest of code
+        $split[] = substr($code, $cursor, (strlen($code) - $cursor));
+
+        // uncomment to see how the template is divided into parts
+        //print_r($split);
+
+        return array($split, $blockPositions);
+    }
+
+    /**
      * Compile template
      * @access protected
      *
-     * @param string $code: code to compile
+     * @param string $code : code to compile
+     * @param $isString
+     * @param $templateBasedir
+     * @param $templateDirectory
+     * @param $templateFilepath
+     * @throws \Rain\Tpl_Exception
+     * @throws string
+     * @return null|string
      */
-    protected function compileTemplate($code, $isString, $templateBasedir, $templateDirectory, $templateFilepath) {
+    protected function compileTemplate($code, $isString, $templateBasedir, $templateDirectory, $templateFilepath)
+    {
+        $parsedCode = '';
+
         // Execute plugins, before_parse
         $context = static::getPlugins()->createContext(array(
             'code' => $code,
@@ -230,340 +359,137 @@ class Parser {
         $code = $context->code;
 
         // set tags
-        foreach (static::$tags as $tag => $tagArray) {
-            list( $split, $match ) = $tagArray;
-            $tagSplit[$tag] = $split;
-            $tagMatch[$tag] = $match;
+        $tagSplit = array();
+
+        foreach (static::$tags as $tag => $regexp)
+        {
+            if (is_array($regexp))
+                $tagSplit[$tag] = $regexp[0];
+            else
+                $tagSplit[$tag] = $regexp;
         }
 
         $keys = array_keys(static::$registered_tags);
         $tagSplit += array_merge($tagSplit, $keys);
 
         //Remove comments
-        if ($this->config['remove_comments']) {
+        if ($this->config['remove_comments'])
+        {
             $code = preg_replace('/<!--(.*)-->/Uis', '', $code);
         }
 
-        //split the code with the tags regexp
-        $codeSplit = preg_split("/" . implode("|", $tagSplit) . "/", $code, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        // Testing parser configuration:
+        //$this->config['ignore_single_quote'] = true;
+        //$this->config['ignore_unknown_tags'] = true;
 
-        //variables initialization
-        $parsedCode = $comentIsOpen = $ignoreIsOpen = NULL;
-        $openIf = $loopLevel = 0;
+        list($codeSplit, $blockPositions) = $this->prepareCodeSplit($code);
 
-        // if the template is not empty
+        // new code
         if ($codeSplit)
+        {
+            $this->tagData = array(
 
-            //read all parsed code
-            foreach ($codeSplit as $html) {
+            );
 
-                //close ignore tag
-                if (!$comentIsOpen && preg_match($tagMatch['ignore_close'], $html))
-                    $ignoreIsOpen = FALSE;
+            // uncomment line below to take a look what we have to parse
+            // var_dump($codeSplit);
 
-                //code between tag ignore id deleted
-                elseif ($ignoreIsOpen) {
-                    //ignore the code
-                }
+            /**
+             * Loop over all code parts and execute actions on tags found in code
+             *
+             * Every code part begins with a HTML code or with a "{" that should be our TAG
+             * For every found tag there is a callback executed to parse TPL -> PHP code
+             *
+             * Places where we are looking for callbacks are in order:
+             * 1. $this->{tagName}BlockParser()
+             * 2. $this->blockParserCallbacks[{tagName}]()
+             * 3. {tagName}()
+             *
+             * @author Damian Kęska <damian.keska@fingo.pl>
+             */
+            foreach ($codeSplit as $index => $part)
+            {
+                // run tag parsers only on tags, exclude "{ " from parsing
+                $starts = substr($part, 1, 1);
 
-                //close no parse tag
-                elseif (preg_match($tagMatch['noparse_close'], $html))
-                    $comentIsOpen = FALSE;
+                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t" || ($this->config['ignore_single_quote'] && $starts == "'"))
+                    continue;
 
-                //code between tag noparse is not compiled
-                elseif ($comentIsOpen)
-                    $parsedCode .= $html;
+                // tag parser found?
+                $found = false;
 
-                //ignore
-                elseif (preg_match($tagMatch['ignore'], $html))
-                    $ignoreIsOpen = TRUE;
+                foreach (static::$tags as $tagName => $tag)
+                {
+                    $method = null;
 
-                //noparse
-                elseif (preg_match($tagMatch['noparse'], $html))
-                    $comentIsOpen = TRUE;
+                    // select a method source that will parse selected tag
+                    if (method_exists($this, $tagName. 'BlockParser'))
+                        $method = array($this, $tagName. 'BlockParser');
 
-                //include tag
-                elseif (preg_match($tagMatch['include'], $html, $matches)) {
-                
-                    //get the folder of the actual template
-                    $actualFolder = substr($templateDirectory, strlen($this->config['tpl_dir']));
-                    $includeTemplate = null; // reset variable
-                    
-                    // search for files in include_path
-                    if (strpos($matches[1], '$') === false) 
+                    elseif (isset($this->blockParserCallbacks[$tagName]) && is_callable($this->blockParserCallbacks[$tagName]))
+                        $method = $this->blockParserCallbacks[$tagName];
+
+                    elseif(function_exists($tagName. 'BlockParser'))
+                        $method = $tagName. 'BlockParser';
+
+
+                    if ($method)
                     {
-                        $path = pathinfo($matches[1]);
-                        
-                        if ($path['dirname'] == '.')
-                            $path['dirname'] = '';
-                            
-                        // compatibility (allow both with and without extensions)
-                        $path['basename'] = str_replace('.' .$this->config['tpl_ext'], '', $path['basename']);
-                        
-                        foreach ($this->config['include_path'] as $dir)
+                        $originalPart = $part;
+
+                        if (!isset($this->tagData[$tagName]))
                         {
-                            $searchPath = str_replace('//', '/', $dir. '/' .$path['dirname']. '/' .$path['basename']. '.' .$this->config['tpl_ext']);
-                            
-                            if (is_file($searchPath))
-                            {
-                                $includeTemplate = substr($searchPath, 0, strlen($searchPath)-(strlen($this->config['tpl_ext'])+1));
-                                $includeTemplate = static::reducePath( $includeTemplate );
-                                break;
-                            }
+                            $this->tagData[$tagName] = array(
+                                'level' => 1,
+                                'count' => 0,
+                            );
                         }
-                    }
-                    
-                    // if file is not in include_path but propably in tpl_dir (main templates dir for relative paths)
-                    if (!$includeTemplate)
-                    {
-                        //get the included template
-                        if (strpos($matches[1], '$') !== false) 
+
+                        $result = call_user_func_array($method, array(
+                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code,
+                        ));
+
+                        $codeSplit[$index] = $part;
+
+                        if ($codeSplit[$index] !== $originalPart)
                         {
-                            $includeTemplate = $this->varReplace($matches[1], $loopLevel);
-                        } else {
-                            $includeTemplate = $actualFolder . $this->varReplace($matches[1], $loopLevel);
-                        }
-                        
-                        // reduce the path
-                        $includeTemplate = static::reducePath( $includeTemplate );
-                        
-                        // if template does not exists, try to find in directory of current template to make RainTPL more smart
-                        if(!is_file($includeTemplate))
-                            $includeTemplate = dirname($templateFilepath). '/' .$includeTemplate;
-                    }
-                    
-                    //dynamic include
-                    $parsedCode .= '<?php require $this->checkTemplate("' . $includeTemplate . '");?>';
-
-                }
-
-                //loop
-                elseif (preg_match($tagMatch['loop'], $html, $matches)) {
-
-                    // increase the loop counter
-                    $loopLevel++;
-
-                    //replace the variable in the loop
-                    $var = $this->varReplace($matches['variable'], $loopLevel - 1, $escape = FALSE);
-                    if (preg_match('#\(#', $var)) {
-                        $newvar = "\$newvar{$loopLevel}";
-                        $assignNewVar = "$newvar=$var;";
-                    } else {
-                        $newvar = $var;
-                        $assignNewVar = null;
-                    }
-
-                    // check black list
-                    $this->blackList($var);
-
-                    //loop variables
-                    $counter = "\$counter$loopLevel";       // count iteration
-
-                    if (isset($matches['key']) && isset($matches['value'])) {
-                        $key = $matches['key'];
-                        $value = $matches['value'];
-                    } elseif (isset($matches['key'])) {
-                        $key = "\$key$loopLevel";               // key
-                        $value = $matches['key'];
-                    } else {
-                        $key = "\$key$loopLevel";               // key
-                        $value = "\$value$loopLevel";           // value
-                    }
-
-
-
-                    //loop code
-                    $parsedCode .= "<?php $counter=-1; $assignNewVar if( isset($newvar) && ( is_array($newvar) || $newvar instanceof Traversable ) && sizeof($newvar) ) foreach( $newvar as $key => $value ){ $counter++; ?>";
-                }
-
-                //close loop tag
-                elseif (preg_match($tagMatch['loop_close'], $html)) {
-
-                    //iterator
-                    $counter = "\$counter$loopLevel";
-
-                    //decrease the loop counter
-                    $loopLevel--;
-
-                    //close loop code
-                    $parsedCode .= "<?php } ?>";
-                }
-
-                //break loop tag
-                elseif (preg_match($tagMatch['loop_break'], $html)) {
-                    //close loop code
-                    $parsedCode .= "<?php break; ?>";
-                }
-
-                //continue loop tag
-                elseif (preg_match($tagMatch['loop_continue'], $html)) {
-                    //close loop code
-                    $parsedCode .= "<?php continue; ?>";
-                }
-
-                //if
-                elseif (preg_match($tagMatch['if'], $html, $matches)) {
-
-                    //increase open if counter (for intendation)
-                    $openIf++;
-
-                    //tag
-                    $tag = $matches[0];
-
-                    //condition attribute
-                    $condition = $matches[1];
-
-                    // check black list
-                    $this->blackList($condition);
-
-                    //variable substitution into condition (no delimiter into the condition)
-                    $parsedCondition = $this->varReplace($condition, $loopLevel, $escape = FALSE);
-
-                    //if code
-                    $parsedCode .= "<?php if( $parsedCondition ){ ?>";
-                }
-
-                //elseif
-                elseif (preg_match($tagMatch['elseif'], $html, $matches)) {
-
-                    //tag
-                    $tag = $matches[0];
-
-                    //condition attribute
-                    $condition = $matches[1];
-
-                    // check black list
-                    $this->blackList($condition);
-
-                    //variable substitution into condition (no delimiter into the condition)
-                    $parsedCondition = $this->varReplace($condition, $loopLevel, $escape = FALSE);
-
-                    //elseif code
-                    $parsedCode .= "<?php }elseif( $parsedCondition ){ ?>";
-                }
-
-                //else
-                elseif (preg_match($tagMatch['else'], $html)) {
-
-                    //else code
-                    $parsedCode .= '<?php }else{ ?>';
-                }
-
-                //close if tag
-                elseif (preg_match($tagMatch['if_close'], $html)) {
-
-                    //decrease if counter
-                    $openIf--;
-
-                    // close if code
-                    $parsedCode .= '<?php } ?>';
-                }
-
-                // autoescape off
-                elseif (preg_match($tagMatch['autoescape'], $html, $matches)) {
-
-                    // get function
-                    $mode = $matches[1];
-                    $this->config['auto_escape_old'] = $this->config['auto_escape'];
-
-                    if ($mode == 'off' or $mode == 'false' or $mode == '0' or $mode == null) {
-                        $this->config['auto_escape'] = false;
-                    } else {
-                        $this->config['auto_escape'] = true;
-                    }
-
-                }
-
-                // autoescape on
-                elseif (preg_match($tagMatch['autoescape_close'], $html, $matches)) {
-                    $this->config['auto_escape'] = $this->config['auto_escape_old'];
-                    unset($this->config['auto_escape_old']);
-                }
-
-                // function
-                elseif (preg_match($tagMatch['function'], $html, $matches)) {
-
-                    // get function
-                    $function = $matches[1];
-
-                    // var replace
-                    if (isset($matches[2]))
-                        $parsedFunction = $function . $this->varReplace($matches[2], $loopLevel, $escape = FALSE, $echo = FALSE);
-                    else
-                        $parsedFunction = $function . "()";
-
-                    // check black list
-                    $this->blackList($parsedFunction);
-
-                    // function
-                    $parsedCode .= "<?php echo $parsedFunction; ?>";
-                }
-
-                //ternary
-                elseif (preg_match($tagMatch['ternary'], $html, $matches)) {
-                    $parsedCode .= "<?php echo " . '(' . $this->varReplace($matches[1], $loopLevel, $escape = TRUE, $echo = FALSE) . '?' . $this->varReplace($matches[2], $loopLevel, $escape = TRUE, $echo = FALSE) . ':' . $this->varReplace($matches[3], $loopLevel, $escape = TRUE, $echo = FALSE) . ')' . "; ?>";
-                }
-
-                //variables
-                elseif (preg_match($tagMatch['variable'], $html, $matches)) {
-                    //variables substitution (es. {$title})
-                    $parsedCode .= "<?php " . $this->varReplace($matches[1], $loopLevel, $escape = TRUE, $echo = TRUE) . "; ?>";
-                }
-
-
-                //constants
-                elseif (preg_match($tagMatch['constant'], $html, $matches)) {
-                    $parsedCode .= "<?php echo " . $this->conReplace($matches[1], $loopLevel) . "; ?>";
-                }
-
-                // registered tags
-                else {
-
-                    $found = FALSE;
-                    foreach (static::$registered_tags as $tags => $array) {
-                        if (preg_match_all('/' . $array['parse'] . '/', $html, $matches)) {
                             $found = true;
-                            $parsedCode .= "<?php echo call_user_func( static::\$registered_tags['$tags']['function'], " . var_export($matches, 1) . " ); ?>";
+                            break;
                         }
                     }
+                }
 
-                    if (!$found){
-                        $parsedCode .= $html;
+                if ($found === false && !$this->config['ignore_unknown_tags'])
+                {
+                    $pos = $this->findLine($index, $blockPositions, $code);
+                    $e = new SyntaxException('Error! Unknown tag "' .$part. '", loaded by ' .$templateFilepath. ' at line ' .$pos['line']. ', offset ' .$pos['offset'], 1, null, $pos['line'], $templateFilepath);
+                    throw $e->templateFile($templateFilepath);
+                }
+            }
+
+            if ($this->tagData)
+            {
+                foreach ($this->tagData as $tag => $data)
+                {
+                    if (isset($data['level']) && intval($data['level']) > 1)
+                    {
+                        $e = new SyntaxException("Error! You need to close an {' .$tag. '} tag, in file ".$templateFilepath, 2, null, 'unknown', $templateFilepath);
+                        throw $e->templateFile($templateFilepath);
                     }
                 }
             }
 
-
-        if ($isString) {
-            if ($openIf > 0) {
-
-                $trace = debug_backtrace();
-                $caller = array_shift($trace);
-
-                $e = new SyntaxException("Error! You need to close an {if} tag in the string, loaded by {$caller['file']} at line {$caller['line']}");
-                throw $e->templateFile($templateFilepath);
-            }
-
-            if ($loopLevel > 0) {
-
-                $trace = debug_backtrace();
-                $caller = array_shift($trace);
-                $e = new SyntaxException("Error! You need to close the {loop} tag in the string, loaded by {$caller['file']} at line {$caller['line']}");
-                throw $e->templateFile($templateFilepath);
-            }
-        } else {
-            if ($openIf > 0) {
-                $e = new SyntaxException("Error! You need to close an {if} tag in $templateFilepath template");
-                throw $e->templateFile($templateFilepath);
-            }
-
-            if ($loopLevel > 0) {
-                $e = new SyntaxException("Error! You need to close the {loop} tag in $templateFilepath template");
-                throw $e->templateFile($templateFilepath);
-            }
+            $parsedCode = join('', $codeSplit);
         }
 
-        $html = str_replace('?><?php', ' ', $parsedCode);
+        // optimize output
+        $parsedCode = str_replace('?><?php', '', $parsedCode);
+
+        if ($this->config['print_parsed_code'])
+        {
+            print($parsedCode);
+            exit;
+        }
 
         // Execute plugins, after_parse
         $context->code = $parsedCode;
@@ -572,8 +498,38 @@ class Parser {
         return $context->code;
     }
 
-    protected function varReplace($html, $loopLevel = NULL, $escape = TRUE, $echo = FALSE) {
+    /**
+     * Find a line number and byte offset of {code} tag in compiled file
+     *
+     * @param int $partIndex Code part index
+     * @param array $codeSplit Splitted code (and not only code) parts
+     * @param array $blockPositions Index of positions of all splitted code parts
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return array
+     */
+    protected function findLine($partIndex, $blockPositions, $code)
+    {
+        if (!isset($blockPositions[$partIndex]))
+        {
+            return array(
+                'line' => 'unknown',
+                'offset' => 'unknown',
+            );
+        }
 
+        $blockPosition = explode('|', $blockPositions[$partIndex]);
+        $codeString = substr($code, 0, $blockPosition[0]);
+        $lines = explode("\n", $codeString);
+
+        return array(
+            'line' => count($lines),
+            'offset' => $blockPosition[0],
+        );
+    }
+
+    protected function varReplace($html, $loopLevel = NULL, $escape = TRUE, $echo = FALSE)
+    {
         // change variable name if loop level
         if (!empty($loopLevel))
             $html = preg_replace(array('/(\$key)\b/', '/(\$value)\b/', '/(\$counter)\b/'), array('${1}' . $loopLevel, '${1}' . $loopLevel, '${1}' . $loopLevel), $html);
@@ -609,15 +565,396 @@ class Parser {
         return $html;
     }
 
+    /**
+     * Determine if the tag is selected tag ending
+     *
+     * @param string $tagBody Tag body string
+     * @param array|string $endings Possible endings, or ending (if passed a string)
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+    protected function parseTagEnding($tagBody, $endings)
+    {
+        $tagBody = strtolower($tagBody);
+
+        if (substr($tagBody, 0, 2) !== '{/' /*|| substr($tagBody, 0, 4) == '{end'*/)
+        {
+            return false;
+        }
+
+        if (!is_array($endings))
+            $endings = array($endings);
+
+        if (!$endings) return false;
+
+        foreach ($endings as $endingKeyword)
+        {
+            if ($tagBody === '{/' .$endingKeyword. '}')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Parse tag arguments
+     *
+     * Example input:
+     * {foreach from="$test123" item="i" key="k"}
+     *
+     * Output:
+     * from: $test123
+     * item: i
+     * key: k
+     *
+     * @param string $tagBody
+     * @author Damian Kęska <damian.keska@fino.pl>
+     * @return array
+     */
+    protected function parseTagArguments($tagBody)
+    {
+        // strip tag out of "{" and "}"
+        if (substr($tagBody, 0, 1) == '{')
+            $tagBody = substr($tagBody, 1, (strlen($tagBody) - 2));
+
+        // this not includes a value with spaces inside as we will be passing mostly variables here
+        $args = explode(' ', $tagBody);
+
+        $argsAssoc = array();
+
+        foreach ($args as $arg)
+        {
+            $equalsPos = strpos($arg, '=');
+
+            if ($equalsPos === false)
+                continue;
+
+            $value = trim(substr($arg, ($equalsPos + 2), strlen($arg)));
+            $argsAssoc[trim(substr($arg, 0, $equalsPos))] = substr($value, 0, (strlen($value) - 1));
+        }
+
+        return $argsAssoc;
+    }
+
+    /**
+     * Parse variables {$var}
+     *
+     * Example input:
+     * {$test}
+     * {$test|trim}
+     * {$test|str_replace:"a":"b"|trim|ucfirst}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return null
+     */
+    protected function variableBlockParser(&$tagData, &$part, &$tag)
+    {
+        if (substr($part, 0, 2) != '{$')
+            return false;
+
+        preg_match($tag[1], $part, $matches);
+        $var = $matches[1];
+
+        //variables substitution (es. {$title})
+        $part = "<?=" . $this->parseModifiers($var, true) . ";?>";
+        return true;
+    }
+
+    /**
+     * {if} code block parser
+     *
+     * Examples:
+     * {if="$test > 5"} then here{/if}
+     * {if $test > 5} then something here{/if}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     *
+     * @regex /{if="([^"]*)"}/
+     * @regex ({if.*?})
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     *
+     * @return null|bool
+     */
+    protected function ifBlockParser(&$tagData, &$part, &$tag)
+    {
+        $lowerPart = strtolower($part);
+        $ending = $this->parseTagEnding($lowerPart, 'if');
+
+        /**
+         * {/if} - closing
+         */
+        if ($ending === true)
+        {
+            $tagData['level']--;
+            $part = '<?php }?>';
+            return true;
+        }
+
+        /**
+         * {if} - opening
+         */
+
+        $tagType = substr($lowerPart, 0, 4);
+
+        if ($tagType === '{if=')
+        {
+            $posX = 2; // include =" at beginning
+            $posY = 2; // include " at ending
+
+        } elseif ($tagType === '{if ') {
+            $posX = 1;
+            $posY = 1;
+
+        } else
+            return false;
+
+        $tagData['level']++;
+        $tagData['count']++;
+        $part = '<?php if(' .$this->varReplace(substr($part, 3 + $posX, (strlen($part) - ($posY + 3 + $posX))), $this->tagData['loop']['level'], $escape = FALSE). '){?>';
+
+        return true;
+    }
+
+    /**
+     * {else} instruction, could be used only inside of {if} block
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     *
+     * @throws SyntaxException
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return null|void
+     */
+    protected function elseBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code)
+    {
+        $p = strtolower($part);
+
+        if ($p == '{else}')
+        {
+            if ((isset($this->tagData['if']['level']) || $this->tagData['if']['level'] < 1) && (isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1))
+            {
+                $context = $this->findLine($blockIndex, $blockPositions, $code);
+                $e = new SyntaxException('Trying to use {else} outside of a loop', 3, null, $context['line'], $templateFilePath);
+            }
+
+            $part = '<?php }else{?>';
+        }
+    }
+
+    /**
+     * {function} instruction
+     *
+     * Examples:
+     * {function="test()"}
+     * {test()}
+     * {test()|trim}
+     *
+     * @param array $tagData
+     * @param string $part
+     * @param string $tag
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return null|void
+     */
+    protected function functionBlockParser(&$tagData, &$part, &$tag)
+    {
+        $isDirectFunction = is_callable(substr($part, 1, strpos($part, '(') - 1));
+
+        if (substr(strtolower($part), 0, 9) !== '{function' && !$isDirectFunction)
+            return false;
+
+        if ($isDirectFunction)
+        {
+            $function = substr($part, 1, strlen($part) - 2);
+
+        } else {
+            $count = 2;
+
+            if (substr($part, -2) !== '"}' && substr($part, -2) !== "'}")
+                $count = 1;
+
+            // get function
+            $function = str_replace(')"|', ')|', substr($part, 11, ((strlen($part) - 11) - $count)));
+        }
+
+        // check black list
+        $this->blackList(substr($function, 0, strpos(str_replace(' ', '', $function), '(')));
+
+        // function
+        $part = "<?php echo(".$this->parseModifiers($function). ");?>";
+    }
+
+    /**
+     * {loop} and {foreach}
+     *
+     * Usage examples:
+     * {loop="$fromVariable" as $key => $value}
+     * {loop="$fromVariable"}
+     * {foreach="$fromVariable" as $key => $value}
+     * {foreach="$fromVariable"}
+     * {foreach from="$fromVariable" item="i" key="k"}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     *
+     * @throws SyntaxException
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return null
+     */
+    protected function loopBlockParser(&$tagData, &$part, &$tag)
+    {
+        $lowerPart = strtolower($part);
+
+        $ending = $this->parseTagEnding($lowerPart, array(
+            'loop', 'foreach',
+        ));
+
+        /**
+         * Previous it was loop_close
+         *
+         * @keywords loop_close, {/loop}, {/foreach}
+         */
+        if ($ending === true)
+        {
+            $tagData['level']--;
+            $part = '<?php }?>';
+            return true;
+        }
+
+        // validate if its a {loop} or {foreach} tag
+        if (substr($part, 0, 5) != '{loop' && substr($part, 0, 8) != '{foreach')
+        {
+            return false;
+        }
+
+        $arguments = $this->parseTagArguments($part);
+        $var = null;
+
+        // "from"
+        if (isset($arguments['from']))
+            $var = $arguments['from'];
+        elseif (isset($arguments['foreach']))
+            $var = $arguments['foreach'];
+        else
+            $var = $arguments['loop'];
+
+        if (!$var)
+        {
+            throw new SyntaxException("Syntax error in foreach/loop, there is no array given to iterate on. Code: ".$part);
+        }
+
+        // increase the loop counter
+        $tagData['count']++;
+
+        //replace the variable in the loop
+        $var = $this->varReplace($var, $tagData['level'] - 1, false);
+
+        if (preg_match('#\(#', $var))
+        {
+            $newvar = "\$newvar{$tagData['level']}";
+            $assignNewVar = "$newvar=$var;";
+        } else {
+            $newvar = $var;
+            $assignNewVar = null;
+        }
+
+        // check variable black list
+        $this->blackList($var);
+
+        //loop variables
+        $counter = "\$counter".$tagData['level'];
+
+        // prefix, example: $value1, $value2 etc. by default shoud be just $value
+        $valuesPrefix = '';
+
+        if ($tagData['level'] > 1)
+            $valuesPrefix = $tagData['level'];
+
+        // key
+        if (isset($arguments['key']))
+            $key = "\$".$arguments['key'];
+        else
+            $key = "\$key".$valuesPrefix;
+
+        if (isset($arguments['value']))
+            $value = "\$".$arguments['value'];
+        elseif (isset($arguments['item']))
+            $value = "\$".$arguments['item'];
+        else
+            $value = "\$value".$valuesPrefix;
+
+        // result code passed by reference
+        $part = "<?php $counter=-1; $assignNewVar if(isset($newvar)&&(is_array($newvar)||$newvar instanceof Traversable)&& sizeof($newvar))foreach($newvar as $key => $value){ $counter++; ?>";
+    }
+
+    /**
+     * {break} instruction, could be used only inside of {foreach} or {loop} blocks
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     *
+     * @throws SyntaxException
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return null|void
+     */
+    protected function loop_breakBlockParser(&$tagData, &$part, &$tag)
+    {
+        $p = strtolower($part);
+
+        if ($p == '{break}')
+        {
+            if ((isset($this->tagData['foreach']['level']) || $this->tagData['foreach']['level'] < 1) && (isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1))
+                throw new SyntaxException('Trying to use {break} outside of a loop');
+
+            $part = '<?php break;?>';
+        }
+    }
+
+    /**
+     * {continue} instruction, could be used only inside of {foreach} or {loop} blocks
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @throws SyntaxException
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return null|void
+     */
+    protected function loop_continueBlockParser(&$tagData, &$part, &$tag)
+    {
+        $p = strtolower($part);
+
+        if ($p == '{continue}')
+        {
+            if ((isset($this->tagData['foreach']['level']) || $this->tagData['foreach']['level'] < 1) && (isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1))
+                throw new SyntaxException('Trying to use {continue} outside of a loop');
+
+            $part = '<?php continue;?>';
+        }
+    }
+
     protected function conReplace($html) {
         $html = $this->modifierReplace($html);
         return $html;
     }
 
-    protected function modifierReplace($html) {
-
+    protected function modifierReplace($html)
+    {
         $this->blackList($html);
-        if (strpos($html,'|') !== false && substr($html,strpos($html,'|')+1,1) != "|") {
+
+        if (strpos($html,'|') !== false && substr($html,strpos($html,'|')+1,1) != "|")
+        {
             preg_match('/([\$a-z_A-Z0-9\(\),\[\]"->]+)\|([\$a-z_A-Z0-9\(\):,\[\]"->]+)/i', $html,$result);
 
             $function_params = $result[1];
@@ -628,7 +965,8 @@ class Parser {
 
             $html = str_replace($result[0],$function . "(" . $function_params . "$params)",$html);
 
-            if (strpos($html,'|') !== false && substr($html,strpos($html,'|')+1,1) != "|") {
+            if (strpos($html,'|') !== false && substr($html,strpos($html,'|')+1,1) != "|")
+            {
                 $html = $this->modifierReplace($html);
             }
         }
@@ -661,6 +999,50 @@ class Parser {
 
             return false;
         }
+    }
+
+    /**
+     * Parse modifiers on a string or variable, function
+     *
+     * @param string $var Variable/string/function input string
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return string Output
+     */
+    protected function parseModifiers($var, $useVarReplace = false)
+    {
+        $functions = explode('|', $var);
+        $result = $functions[0];
+
+        if ($useVarReplace)
+            $result = $this->varReplace($result, $this->tagData['loop']['level'], true, false);
+
+        foreach ($functions as $function)
+        {
+            if ($function === $result)
+                continue;
+
+            // security
+            $this->blackList($function);
+
+            // arguments
+            $args = explode(':', $function);
+
+            // our result string
+            $result = $args[0]. '(' .$result;
+
+            foreach ($args as $arg)
+            {
+                if ($arg === $args[0])
+                    continue;
+
+                $result .= ', ' .$arg;
+            }
+
+            $result .= ')';
+        }
+
+        return $result;
     }
 
     public static function reducePath( $path ){
