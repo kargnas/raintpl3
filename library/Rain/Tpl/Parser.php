@@ -205,8 +205,8 @@ class Parser
         $fp = fopen($parsedTemplateFilepath, "w");
 
         // lock the file
-        if (flock($fp, LOCK_SH)) {
-
+        if (flock($fp, LOCK_SH))
+        {
             // xml substitution
             $code = preg_replace("/<\?xml(.*?)\?>/s", "##XML\\1XML##", $code);
 
@@ -412,7 +412,7 @@ class Parser
                 // run tag parsers only on tags, exclude "{ " from parsing
                 $starts = substr($part, 1, 1);
 
-                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t" || ($this->config['ignore_single_quote'] && $starts == "'"))
+                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t" || ($this->config['ignore_single_quote'] && $starts == "'") || strpos($part, "\n") !== false)
                     continue;
 
                 // tag parser found?
@@ -485,6 +485,8 @@ class Parser
         // optimize output
         $parsedCode = str_replace('?><?php', '', $parsedCode);
 
+        //$this->config['print_parsed_code'] = true;
+
         if ($this->config['print_parsed_code'])
         {
             print($parsedCode);
@@ -528,7 +530,7 @@ class Parser
         );
     }
 
-    protected function varReplace($html, $loopLevel = NULL, $escape = TRUE, $echo = FALSE)
+    protected function varReplace($html, $loopLevel = NULL, $escape = TRUE, $echo = FALSE, $updateModifier = TRUE)
     {
         // change variable name if loop level
         if (!empty($loopLevel))
@@ -546,7 +548,10 @@ class Parser
             }
 
             // update modifier
-            $html = $this->modifierReplace($html);
+            if ($updateModifier)
+            {
+                $html = $this->modifierReplace($html);
+            }
 
             // if does not initialize a value, e.g. {$a = 1}
             if (!preg_match('/\$.*=.*/', $html)) {
@@ -658,10 +663,19 @@ class Parser
         if (substr($part, 0, 2) != '{$')
             return false;
 
-        preg_match($tag[1], $part, $matches);
-        $var = $matches[1];
+        $var = substr($part, 1, (strlen($part) - 2));
 
-        //variables substitution (es. {$title})
+        // check if variable is begin assigned
+        $equalsPos = strpos($part, '=');
+        $firstModificator = strpos($part, "|");
+
+        if ($equalsPos !== false && ($firstModificator === false || $equalsPos < $firstModificato))
+        {
+            $part = "<?php " . $this->parseModifiers($var, true) . ";?>";
+            return true;
+        }
+
+        // variables substitution (eg. {$title})
         $part = "<?=" . $this->parseModifiers($var, true) . ";?>";
         return true;
     }
@@ -790,7 +804,7 @@ class Parser
         $this->blackList(substr($function, 0, strpos(str_replace(' ', '', $function), '(')));
 
         // function
-        $part = "<?php echo(".$this->parseModifiers($function). ");?>";
+        $part = "<?php echo ".$this->parseModifiers($function). ";?>";
     }
 
     /**
@@ -1014,8 +1028,8 @@ class Parser
         $functions = explode('|', $var);
         $result = $functions[0];
 
-        if ($useVarReplace)
-            $result = $this->varReplace($result, $this->tagData['loop']['level'], true, false);
+        if ($useVarReplace === true)
+            $result = $functions[0] = $this->varReplace($result, $this->tagData['loop']['level'], true, false, false);
 
         foreach ($functions as $function)
         {
@@ -1045,14 +1059,16 @@ class Parser
         return $result;
     }
 
-    public static function reducePath( $path ){
+    public static function reducePath($path)
+    {
         // reduce the path
-        $path = str_replace( "://", "@not_replace@", $path );
-        $path = preg_replace( "#(/+)#", "/", $path );
-        $path = preg_replace( "#(/\./+)#", "/", $path );
-        $path = str_replace( "@not_replace@", "://", $path );
+        $path = str_replace("://", "@not_replace@", $path);
+        $path = preg_replace("#(/+)#", "/", $path);
+        $path = preg_replace("#(/\./+)#", "/", $path);
+        $path = str_replace("@not_replace@", "://", $path);
 
-        while( preg_match( '#\.\./#', $path ) ){
+        while (preg_match( '#\.\./#', $path))
+        {
             $path = preg_replace('#\w+/\.\./#', '', $path );
         }
 
