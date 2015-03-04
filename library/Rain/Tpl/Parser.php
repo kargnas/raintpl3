@@ -44,39 +44,23 @@ class Parser
 
     // tags natively supported
     protected static $tags = array(
-        'variable' => array('({\$.*?})', '/{(\$.*?)}/'), // RainTPL3.1
-        'if' => array('({if.*?})', '/{if="([^"]*)"}/'),
-        'elseif' => array('({elseif.*?})', '/{elseif="([^"]*)"}/'),
-        'else' => array('({else})', '/{else}/'),
-        'if_close' => array('({\/if})', '/{\/if}/'),
-        'function' => '({function.*?})', // RainTPL3.1
-        'functionDirect' => '({.*?\(.*?\).*?})',
-        'string' => '({".*?})',
         // @TODO: {capture}
         // @TODO: {block}
         // @TODO: support for syntax "as $key => $value" in {loop} and {foreach}
 
-        'loop' => array( // RainTPL3.1
-            '({loop.*?})',
-            /*'/{loop="(?<variable>\${0,1}[^"]*)"(?: as (?<key>\$.*?)(?: => (?<value>\$.*?)){0,1}){0,1}}/'*/
-        ),
-        'foreach' => array( // RainTPL3.1
-            '({foreach.*?})',
-            /*'/{loop="(?<variable>\${0,1}[^"]*)"(?: as (?<key>\$.*?)(?: => (?<value>\$.*?)){0,1}){0,1}}/'*/
-        ),
-        'foreach_close' => array('({\/foreach})', '/{\/foreach}/'), // RainTPL3.1
-        'loop_close' => array('({\/loop})', '/{\/loop}/'), // RainTPL3.1
-        'loop_break' => array('({break})', '/{break}/'),
-        'loop_continue' => array('({continue})', '/{continue}/'),
-        'include' => array('({include.*?})', '/{include="([^"]*)"}/'),
-        'autoescape' => array('({autoescape.*?})', '/{autoescape="([^"]*)"}/'),
-        'autoescape_close' => array('({\/autoescape})', '/{\/autoescape}/'),
-        'noparse' => array('({noparse})', '/{noparse}/'),
-        'noparse_close' => array('({\/noparse})', '/{\/noparse}/'),
-        'ignore' => array('({ignore}|{\*)', '/{ignore}|{\*/'),
-        'ignore_close' => array('({\/ignore}|\*})', '/{\/ignore}|\*}/'),
-        'ternary' => array('({.[^{?]*?\?.*?\:.*?})', '/{(.[^{?]*?)\?(.*?)\:(.*?)}/'),
-        'constant' => array('({#.*?})', '/{#(.*?)#{0,1}}/'),
+        'variable' => true, // {$} RainTPL3.1
+        'if' => true, // {if}, {elseif} RainTPL3.1
+        'else' => true, // {else} RainTPL3.1
+        'function' => true, // {function} RainTPL3.1
+        'loop' => true, // {loop}, {foreach} RainTPL3.1
+        'loop_break' => true, // RainTPL3.1
+        'loop_continue' => true, // RainTPL3.1
+        'include' => true, // RainTPL3.1
+        'autoescape' => true,
+        'noparse' => true,
+        'ternary' => true,
+        'comment' => true, // {*}, {ignore} RainTPL3.1
+        'constant' => true,
     );
 
     /**
@@ -387,6 +371,8 @@ class Parser
         // new code
         if ($codeSplit)
         {
+            // pass all blocks to this parser
+            $passAllBlocksTo = '';
             $this->tagData = array(
 
             );
@@ -420,6 +406,9 @@ class Parser
 
                 foreach (static::$tags as $tagName => $tag)
                 {
+                    if ($passAllBlocksTo)
+                        $tagName = $passAllBlocksTo;
+
                     $method = null;
 
                     // select a method source that will parse selected tag
@@ -446,7 +435,7 @@ class Parser
                         }
 
                         $result = call_user_func_array($method, array(
-                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code,
+                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code, &$passAllBlocksTo,
                         ));
 
                         $codeSplit[$index] = $part;
@@ -700,7 +689,9 @@ class Parser
     protected function ifBlockParser(&$tagData, &$part, &$tag)
     {
         $lowerPart = strtolower($part);
-        $ending = $this->parseTagEnding($lowerPart, 'if');
+        $ending = $this->parseTagEnding($lowerPart, array(
+            'if', 'elseif'
+        ));
 
         /**
          * {/if} - closing
@@ -717,22 +708,44 @@ class Parser
          */
 
         $tagType = substr($lowerPart, 0, 4);
+        $elseTagType = substr($lowerPart, 0, 8);
 
         if ($tagType === '{if=')
         {
+            $type = 'if';
             $posX = 2; // include =" at beginning
             $posY = 2; // include " at ending
+            $len = 3;
 
         } elseif ($tagType === '{if ') {
+            $type = 'if';
             $posX = 1;
             $posY = 1;
+            $len = 3;
+
+        } elseif ($elseTagType === '{elseif=') {
+            $type = '}elseif';
+            $posX = 2;
+            $posY = 2;
+            $len = 7;
+
+        } elseif ($elseTagType === '{elseif ') {
+            $type = '}elseif';
+            $posX = 1;
+            $posY = 1;
+            $len = 7;
 
         } else
             return false;
 
-        $tagData['level']++;
-        $tagData['count']++;
-        $part = '<?php if(' .$this->varReplace(substr($part, 3 + $posX, (strlen($part) - ($posY + 3 + $posX))), $this->tagData['loop']['level'], $escape = FALSE). '){?>';
+
+        if ($type === 'if')
+        {
+            $tagData['level']++;
+            $tagData['count']++;
+        }
+
+        $part = '<?php ' .$type. '(' .$this->varReplace(substr($part, $len + $posX, (strlen($part) - ($posY + $len + $posX))), $this->tagData['loop']['level'], $escape = FALSE). '){?>';
 
         return true;
     }
@@ -765,12 +778,55 @@ class Parser
     }
 
     /**
-     * {function} instruction
+     * Parse a template comment - {*}, {/*}, {*, *}, {ignore}, {/ignore}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @param $templateFilePath
+     * @param $blockIndex
+     * @param $blockPositions
+     * @param $code
+     * @param $passAllBlocksTo
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+    protected function commentBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo)
+    {
+        $lowerPart = strtolower($part);
+
+        if (substr($lowerPart, 0, 2) === '{*' || $lowerPart === '{*}' || $lowerPart === '{ignore}')
+        {
+            $tagData['level']++;
+            $tagData['count']++;
+            $passAllBlocksTo = 'comment';
+            $part = '';
+            return true;
+
+        } elseif (substr($lowerPart, -2) === '*}' || $lowerPart === '{/*}' || $lowerPart === '{/ignore}') {
+            $tagData['level']--;
+            $passAllBlocksTo = '';
+            $part = '';
+            return true;
+        }
+
+        // erase all inside a comment block
+        if ($passAllBlocksTo === 'comment' && $tagData['level'] > 0)
+        {
+            $part = '';
+            return true;
+        }
+    }
+
+    /**
+     * {function} instruction, handles also strings and it's modificators
      *
      * Examples:
      * {function="test()"}
      * {test()}
      * {test()|trim}
+     * {"TEST"|strtolower}
      *
      * @param array $tagData
      * @param string $part
@@ -782,11 +838,12 @@ class Parser
     protected function functionBlockParser(&$tagData, &$part, &$tag)
     {
         $isDirectFunction = is_callable(substr($part, 1, strpos($part, '(') - 1));
+        $isString = in_array(substr($part, 1, 1), array("'", '"'));
 
-        if (substr(strtolower($part), 0, 9) !== '{function' && !$isDirectFunction)
+        if (substr(strtolower($part), 0, 9) !== '{function' && !$isDirectFunction && !$isString)
             return false;
 
-        if ($isDirectFunction)
+        if ($isDirectFunction || $isString)
         {
             $function = substr($part, 1, strlen($part) - 2);
 
