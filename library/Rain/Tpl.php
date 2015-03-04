@@ -245,24 +245,31 @@ class Tpl {
     /**
      * Check if the template exist and compile it if necessary
      *
-     * @param string $template: name of the file of the template
+     * @param string $template : name of the file of the template
      *
+     * @throws Tpl\Exception
+     * @throws \Exception
      * @throw \Rain\Tpl\NotFoundException the file doesn't exists
      * @return string: full filepath that php must use to include
      */
-    protected function checkTemplate($template) {
-
+    protected function checkTemplate($template)
+    {
         // set filename
         $templateName = basename($template);
         $templateBasedir = strpos($template, DIRECTORY_SEPARATOR) ? dirname($template) . DIRECTORY_SEPARATOR : null;
         $templateDirectory = $this->config['tpl_dir'] . $templateBasedir;
         $parsedTemplateFilepath = $this->config['cache_dir'] . $templateName . "." . md5($templateDirectory . serialize($this->config['checksum']) . $template) . '.rtpl.php';
-        
+        $extension = '';
+
+        // add default extension in case there is no any
+        if (!pathinfo($template, PATHINFO_EXTENSION) && $this->config['tpl_ext'])
+            $extension = "." .$this->config['tpl_ext'];
+
         // check if its an absolute path
         if ($template[0] === "/")
-            $templateFilepath = $template. "." .$this->config['tpl_ext'];
+            $templateFilepath = $template . $extension;
         else
-            $templateFilepath = $templateDirectory.$templateName. '.' .$this->config['tpl_ext'];
+            $templateFilepath = $templateDirectory.$templateName. $extension;
 
         // if the template doesn't exsist throw an error
         if (!is_file($templateFilepath)) {
@@ -295,12 +302,11 @@ class Tpl {
     /**
      * Compile a string if necessary
      *
-     * @param string $string: RainTpl template string to compile
-     *
-     * @return string: full filepath that php must use to include
+     * @param string $string RainTpl template string to compile
+     * @return string full filepath that php must use to include
      */
-    protected function checkString($string) {
-
+    protected function checkString($string)
+    {
         // set filename
         $templateName = md5($string . implode($this->config['checksum']));
         $parsedTemplateFilepath = $this->config['cache_dir'] . $templateName . '.s.rtpl.php';
@@ -309,7 +315,8 @@ class Tpl {
 
 
         // Compile the template if the original has been updated
-        if ($this->config['debug'] || !file_exists($parsedTemplateFilepath)) {
+        if ($this->config['debug'] || !file_exists($parsedTemplateFilepath))
+        {
             $parser = new Tpl\Parser($this->config, static::$plugins, static::$registered_tags);
             $parser->compileString($templateName, $templateBasedir, $templateFilepath, $parsedTemplateFilepath, $string);
         }
