@@ -440,7 +440,7 @@ class Parser
                         if (!isset($this->tagData[$tagName]))
                         {
                             $this->tagData[$tagName] = array(
-                                'level' => 1,
+                                'level' => 0,
                                 'count' => 0,
                             );
                         }
@@ -807,6 +807,66 @@ class Parser
         $part = "<?php echo ".$this->parseModifiers($function). ";?>";
     }
 
+    public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code)
+    {
+        $lowerPart = strtolower($part);
+
+        if(substr($lowerPart, 0, 8) !== '{include')
+            return false;
+
+        $tagBody = substr($part, 8, strlen($part) - 9);
+
+        // {include="/path/to/template/file"}
+        if (substr($tagBody, 0, 1) == '=')
+            $includeTemplate = trim(substr($tagBody, 1, strlen($tagBody) - 1), '"' . "'");
+        else {
+            $args = $this->parseTagArguments($tagBody);
+
+            // smarty-like {include file="/path/to/template/file"}
+            if (isset($args['file']))
+                $includeTemplate = $args['file'];
+            elseif (isset($args['path']))
+                $includeTemplate = $args['path'];
+            else {
+                $context = $this->findLine($blockIndex, $blockPositions, $code);
+                throw new SyntaxException('Cannot find path attribute for {include} tag, expecting "file" or "path" attribute. Example: {include file="/path/to/file"}', 4, null, $context['line'], $templateFilePath);
+            }
+        }
+
+        // resolved path
+        $path = '';
+
+        // select in all include paths
+        if (isset($this->config['tpl_dir']))
+        {
+            $tplDir = $this->config['tpl_dir'];
+
+            if (!is_array($tplDir) || is_string($tplDir))
+                $tplDir = array($tplDir);
+
+            // include current directory
+            $tplDir[] = dirname($templateFilePath);
+
+            foreach ($tplDir as $dir)
+            {
+                if (is_file($dir . '/' .$includeTemplate))
+                    $path = $dir . '/' .$includeTemplate;
+                elseif (is_file($dir . '/' .$includeTemplate. '.tpl'))
+                    $path = $dir . '/' .$includeTemplate. '.tpl';
+
+                if ($path) break;
+            }
+
+            if ($path)
+            {
+                $part = '<?php require $this->checkTemplate("' . Parser::reducePath($path) . '");?>';
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * {loop} and {foreach}
      *
@@ -863,36 +923,35 @@ class Parser
             $var = $arguments['loop'];
 
         if (!$var)
-        {
             throw new SyntaxException("Syntax error in foreach/loop, there is no array given to iterate on. Code: ".$part);
-        }
 
         // increase the loop counter
         $tagData['count']++;
+        $tagData['level']++;
 
         //replace the variable in the loop
-        $var = $this->varReplace($var, $tagData['level'] - 1, false);
+        //$var = $this->varReplace($var, $tagData['level'] - 1, false);
+
+        // prefix, example: $value1, $value2 etc. by default shoud be just $value
+        $valuesPrefix = '';
+
+        if ($tagData['level'] > 0)
+            $valuesPrefix = $tagData['level'];
+
+        // check variable black list
+        $this->blackList($var);
 
         if (preg_match('#\(#', $var))
         {
-            $newvar = "\$newvar{$tagData['level']}";
+            $newvar = "\$newvar{$valuesPrefix}";
             $assignNewVar = "$newvar=$var;";
         } else {
             $newvar = $var;
             $assignNewVar = null;
         }
 
-        // check variable black list
-        $this->blackList($var);
-
-        //loop variables
-        $counter = "\$counter".$tagData['level'];
-
-        // prefix, example: $value1, $value2 etc. by default shoud be just $value
-        $valuesPrefix = '';
-
-        if ($tagData['level'] > 1)
-            $valuesPrefix = $tagData['level'];
+        // loop variables
+        $counter = "\$counter".$valuesPrefix;
 
         // key
         if (isset($arguments['key']))
@@ -908,7 +967,7 @@ class Parser
             $value = "\$value".$valuesPrefix;
 
         // result code passed by reference
-        $part = "<?php $counter=-1; $assignNewVar if(isset($newvar)&&(is_array($newvar)||$newvar instanceof Traversable)&& sizeof($newvar))foreach($newvar as $key => $value){ $counter++; ?>";
+        $part = "<?php $counter=-1; $assignNewVar if(isset($newvar)&&(is_array($newvar)||$newvar instanceof Traversable)&& sizeof($newvar))foreach($newvar as ".$key." => ".$value."){ $counter++; ?>";
     }
 
     /**
@@ -1040,17 +1099,17 @@ class Parser
             $this->blackList($function);
 
             // arguments
-            $args = explode(':', $function);
+            $args = explode(':', str_replace('::', '\@;;', $function));
 
             // our result string
             $result = $args[0]. '(' .$result;
 
-            foreach ($args as $arg)
+            foreach ($args as $i => $arg)
             {
-                if ($arg === $args[0])
+                if ($i === 0)
                     continue;
 
-                $result .= ', ' .$arg;
+                $result .= ', ' .str_replace('\@;;', '::', $arg);
             }
 
             $result .= ')';
