@@ -857,11 +857,20 @@ class Parser
                 if ($path) break;
             }
 
+            // if its a path string OR a $variable OR a constant
             if ($path)
             {
-                $part = '<?php require $this->checkTemplate("' . Parser::reducePath($path) . '");?>';
+                $part = '<?php require $this->checkTemplate("' . $path . '");?>';
+                return true;
+
+            } elseif (substr($includeTemplate, 0, 1) == '$' || defined($includeTemplate)) {
+
+                $part = '<?php require $this->checkTemplate(' . $path . ');?>';
                 return true;
             }
+
+            $context = $this->findLine($blockIndex, $blockPositions, $code);
+            throw new NotFoundException('Cannot find template "' . $includeTemplate . '" that was tried to be included from ' .$templateFilePath. ' at line ' .$context['line']. ', offset ' .$context['offset']);
         }
 
         return false;
@@ -949,6 +958,12 @@ class Parser
             $newvar = $var;
             $assignNewVar = null;
         }
+
+        // replace array modificators eg. $array.test to $array["test"]
+        $newvar = $this->varReplace($newvar, null, false, false, false);
+
+        if ($assignNewVar)
+            $assignNewVar = $this->varReplace($newvar, null, false, false, false);
 
         // loop variables
         $counter = "\$counter".$valuesPrefix;
@@ -1074,6 +1089,22 @@ class Parser
         }
     }
 
+    public static function reducePath($path)
+    {
+        // reduce the path
+        $path = str_replace("://", "@not_replace@", $path);
+        $path = preg_replace("#(/+)#", "/", $path);
+        $path = preg_replace("#(/\./+)#", "/", $path);
+        $path = str_replace("@not_replace@", "://", $path);
+
+        while (preg_match( '#\.\./#', $path))
+        {
+            $path = preg_replace('#\w+/\.\./#', '', $path );
+        }
+
+        return $path;
+    }
+
     /**
      * Parse modifiers on a string or variable, function
      *
@@ -1116,21 +1147,5 @@ class Parser
         }
 
         return $result;
-    }
-
-    public static function reducePath($path)
-    {
-        // reduce the path
-        $path = str_replace("://", "@not_replace@", $path);
-        $path = preg_replace("#(/+)#", "/", $path);
-        $path = preg_replace("#(/\./+)#", "/", $path);
-        $path = str_replace("@not_replace@", "://", $path);
-
-        while (preg_match( '#\.\./#', $path))
-        {
-            $path = preg_replace('#\w+/\.\./#', '', $path );
-        }
-
-        return $path;
     }
 }
