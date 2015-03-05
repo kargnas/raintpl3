@@ -230,7 +230,7 @@ class Parser
     }
 
     /**
-     * Split code into parts that should contain {code} tags and HTML as separate elements
+     * Split code into parts that should contain {code} tavar_dump($templateFilepath);gs and HTML as separate elements
      *
      * @param string $code Input TPL code
      * @author Damian Kęska <damian.keska@fingo.pl>
@@ -255,7 +255,7 @@ class Parser
             $sChar = substr($code, $current + 1, 1);
             $sCharMatch = (substr($code, $current + 1, 1) === ' ' || $sChar === "\t" || $sChar === "\n" || $sChar === "\r" || ($this->config['ignore_single_quote'] && $sChar === "'")); // condition that check if there is any space or special character after "{"
 
-            if ($current && !$sCharMatch)
+            if (!$sCharMatch)
             {
                 /**
                  * Template tags
@@ -308,6 +308,10 @@ class Parser
         // the rest of code
         $split[] = substr($code, $cursor, (strlen($code) - $cursor));
 
+        // remove empty entry from beginning if exists
+        if (isset($split[0]) && !$split[0])
+            unset($split[0]);
+
         // uncomment to see how the template is divided into parts
         //print_r($split);
 
@@ -331,7 +335,7 @@ class Parser
     {
         $parsedCode = '';
 
-        // Execute plugins, before_parse
+        // execute plugins, before parse
         $context = static::getPlugins()->createContext(array(
             'code' => $code,
             'template_basedir' => $templateBasedir,
@@ -342,21 +346,7 @@ class Parser
         static::getPlugins()->run('beforeParse', $context);
         $code = $context->code;
 
-        // set tags
-        $tagSplit = array();
-
-        foreach (static::$tags as $tag => $regexp)
-        {
-            if (is_array($regexp))
-                $tagSplit[$tag] = $regexp[0];
-            else
-                $tagSplit[$tag] = $regexp;
-        }
-
-        $keys = array_keys(static::$registered_tags);
-        $tagSplit += array_merge($tagSplit, $keys);
-
-        //Remove comments
+        // remove comments
         if ($this->config['remove_comments'])
         {
             $code = preg_replace('/<!--(.*)-->/Uis', '', $code);
@@ -367,6 +357,12 @@ class Parser
         //$this->config['ignore_unknown_tags'] = true;
 
         list($codeSplit, $blockPositions) = $this->prepareCodeSplit($code);
+
+        if ($templateFilepath == '/var/www/html/apps/panthera/.fw/lib//templates/admin/templates/dashWidgets/gallery.tpl')
+        {
+            var_dump($codeSplit);
+            exit;
+        }
 
         // new code
         if ($codeSplit)
@@ -440,7 +436,7 @@ class Parser
 
                         $codeSplit[$index] = $part;
 
-                        if ($codeSplit[$index] !== $originalPart)
+                        if ($codeSplit[$index] !== $originalPart || $result === true)
                         {
                             $found = true;
                             break;
@@ -765,7 +761,7 @@ class Parser
     {
         $p = strtolower($part);
 
-        if ($p == '{else}')
+        if ($p === '{else}')
         {
             if ((isset($this->tagData['if']['level']) || $this->tagData['if']['level'] < 1) && (isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1))
             {
