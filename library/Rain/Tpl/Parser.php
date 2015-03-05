@@ -358,12 +358,6 @@ class Parser
 
         list($codeSplit, $blockPositions) = $this->prepareCodeSplit($code);
 
-        if ($templateFilepath == '/var/www/html/apps/panthera/.fw/lib//templates/admin/templates/dashWidgets/gallery.tpl')
-        {
-            var_dump($codeSplit);
-            exit;
-        }
-
         // new code
         if ($codeSplit)
         {
