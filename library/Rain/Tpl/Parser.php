@@ -1,5 +1,7 @@
 <?php
 namespace Rain\Tpl;
+use Rain\Tpl;
+
 /**
  *  RainTPL
  *  --------
@@ -117,14 +119,12 @@ class Parser
     /**
      * Compile the file and save it in the cache
      *
-     * @param string $templateName: name of the template
-     * @param string $templateBaseDir
      * @param string $templateDirectory
      * @param string $templateFilepath
      * @param string $parsedTemplateFilepath: cache file where to save the template
      */
-    public function compileFile($templateName, $templateBasedir, $templateDirectory, $templateFilepath, $parsedTemplateFilepath) {
-
+    public function compileFile($templateFilepath, $parsedTemplateFilepath)
+    {
         // open the template
         $fp = fopen($templateFilepath, "r");
 
@@ -149,8 +149,8 @@ class Parser
                     return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
                 }, $code);
 
-            $parsedCode = $this->compileTemplate($code, $isString = false, $templateBasedir, $templateDirectory, $templateFilepath);
-            $parsedCode = "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
+            $parsedCode = $this->compileTemplate($code, $templateFilepath)
+            . "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
 
             // fix the php-eating-newline-after-closing-tag-problem
             $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
@@ -177,13 +177,11 @@ class Parser
     /**
      * Compile a string and save it in the cache
      *
-     * @param string $templateName: name of the template
-     * @param string $templateBaseDir
      * @param string $templateFilepath
      * @param string $parsedTemplateFilepath: cache file where to save the template
      * @param string $code: code to compile
      */
-    public function compileString($templateName, $templateBasedir, $templateFilepath, $parsedTemplateFilepath, $code)
+    public function compileString($templateFilepath, $parsedTemplateFilepath, $code)
     {
         // open the template
         $fp = fopen($parsedTemplateFilepath, "w");
@@ -203,8 +201,7 @@ class Parser
                     return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
                 }, $code);
 
-            $parsedCode = $this->compileTemplate($code, $isString = true, $templateBasedir, $templateDirectory = null, $templateFilepath);
-
+            $parsedCode = $this->compileTemplate($code, $isString = true, $templateDirectory = null, $templateFilepath);
             $parsedCode = "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
 
             // fix the php-eating-newline-after-closing-tag-problem
@@ -324,21 +321,19 @@ class Parser
      *
      * @param string $code : code to compile
      * @param $isString
-     * @param $templateBasedir
      * @param $templateDirectory
      * @param $templateFilepath
      * @throws \Rain\Tpl_Exception
      * @throws string
      * @return null|string
      */
-    protected function compileTemplate($code, $isString, $templateBasedir, $templateDirectory, $templateFilepath)
+    protected function compileTemplate($code, $templateFilepath)
     {
         $parsedCode = '';
 
         // execute plugins, before parse
         $context = static::getPlugins()->createContext(array(
             'code' => $code,
-            'template_basedir' => $templateBasedir,
             'template_filepath' => $templateFilepath,
             'conf' => $this->config,
         ));
@@ -882,37 +877,22 @@ class Parser
 
         // resolved path
         $path = '';
+        $context = $this->findLine($blockIndex, $blockPositions, $code);
 
         // select in all include paths
         if (isset($this->config['tpl_dir']))
         {
-            $tplDir = $this->config['tpl_dir'];
-
-            if (!is_array($tplDir) || is_string($tplDir))
-                $tplDir = array($tplDir);
-
-            // include current directory
-            $tplDir[] = dirname($templateFilePath);
-
-            foreach ($tplDir as $dir)
-            {
-                if (is_file($dir . '/' .$includeTemplate))
-                    $path = $dir . '/' .$includeTemplate;
-                elseif (is_file($dir . '/' .$includeTemplate. '.tpl'))
-                    $path = $dir . '/' .$includeTemplate. '.tpl';
-
-                if ($path) break;
-            }
+            $path = Tpl::resolveTemplatePath($includeTemplate, $this->config['tpl_dir'], $templateFilePath, $this->config['tpl_ext']);
 
             // if its a path string OR a $variable OR a constant
             if ($path)
             {
-                $part = '<?php require $this->checkTemplate("' . $path . '");?>';
+                $part = '<?php require $this->checkTemplate("' . $path . '", "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
                 return true;
 
             } elseif (substr($includeTemplate, 0, 1) == '$' || defined($includeTemplate)) {
 
-                $part = '<?php require $this->checkTemplate(' . $path . ');?>';
+                $part = '<?php require $this->checkTemplate(' . $includeTemplate . ', "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
                 return true;
             }
 

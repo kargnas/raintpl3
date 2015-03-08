@@ -1,6 +1,7 @@
 <?php
 
 namespace Rain;
+use Rain\Tpl\NotFoundException;
 
 /**
  *  RainTPL
@@ -243,40 +244,93 @@ class Tpl {
     }
 
     /**
+     * Resolve template path
+     *
+     * @param string $template Template name, path, or absolute path
+     * @param array $templateDirectories (Optional) List of included directories
+     * @param string $parentTemplateFilePath (Optional) Path to template that included this template
+     * @param string $defaultExtension (Optional) Default file extension to append when no extension specified
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return string
+     */
+    public static function resolveTemplatePath($template, $templateDirectories = null, $parentTemplateFilePath = null, $defaultExtension = null)
+    {
+        // add default extension in case there is no any
+        if (!pathinfo($template, PATHINFO_EXTENSION) && $defaultExtension)
+        {
+            $extension = "." . $defaultExtension;
+            $template = $template . $extension;
+        }
+
+        $path = '';
+        $tplDir = array();
+
+        if (is_array($templateDirectories))
+            $tplDir = $templateDirectories;
+
+        elseif (!is_array($templateDirectories) || is_string($templateDirectories))
+            $tplDir = array($templateDirectories);
+
+        // include current directory
+        if ($parentTemplateFilePath) $tplDir[] = dirname($parentTemplateFilePath);
+        $tplDir[] = '';
+
+        foreach ($tplDir as $dir)
+        {
+            if (is_file($dir . '/' . $template))
+                $path = $dir . '/' . $template;
+            elseif (is_file($dir . '/' . $template . '.tpl'))
+                $path = $dir . '/' . $template . '.tpl';
+
+            if ($path) break;
+        }
+
+        return $path;
+    }
+
+    /**
      * Check if the template exist and compile it if necessary
      *
-     * @param string $template : name of the file of the template
+     * @param string $template Name of the file of the template
+     * @param string|null $parentTemplateFilePath (Optional) Parent template file path (that template which is including this one)
+     * @param int|null|numeric $parentTemplateLine (Optional) Line from parent template that called this method
+     * @param int|null|numeric $parentTemplateOffset (Optional) Offset of parent template where is this function called
      *
      * @throws Tpl\Exception
-     * @throws \Exception
-     * @throw \Rain\Tpl\NotFoundException the file doesn't exists
-     * @return string: full filepath that php must use to include
+     * @throws \Rain\Tpl\NotFoundException
+     *
+     * @return string Compiled template absolute path
      */
-    protected function checkTemplate($template)
+    protected function checkTemplate($template, $parentTemplateFilePath = null, $parentTemplateLine = null, $parentTemplateOffset = null)
     {
-        // set filename
-        $templateName = basename($template);
-        $templateBasedir = strpos($template, DIRECTORY_SEPARATOR) ? dirname($template) . DIRECTORY_SEPARATOR : null;
-        $templateDirectory = $this->config['tpl_dir'] . $templateBasedir;
-        $parsedTemplateFilepath = $this->config['cache_dir'] . $templateName . "." . md5($templateDirectory . serialize($this->config['checksum']) . $template) . '.rtpl.php';
+        $originalTemplate = $template;
         $extension = '';
 
-        // add default extension in case there is no any
-        if (!pathinfo($template, PATHINFO_EXTENSION) && $this->config['tpl_ext'])
-            $extension = "." .$this->config['tpl_ext'];
+        $path = self::resolveTemplatePath($template, $this->config['tpl_dir'], $parentTemplateFilePath, $this->config['tpl_ext']);
 
-        // check if its an absolute path
-        if ($template[0] === "/")
-            $templateFilepath = $template . $extension;
-        else
-            $templateFilepath = $templateDirectory.$templateName. $extension;
+        // normalize path
+        $path = str_replace(array('//', '//'), '/', $path);
+
+        $parsedTemplateFilepath = $this->config['cache_dir'] . basename($originalTemplate) . "." . md5(dirname($path) . serialize($this->config['checksum']) . $originalTemplate) . '.rtpl.php';
 
         // if the template doesn't exsist throw an error
-        if (!is_file($templateFilepath)) {
-            $e = new Tpl\NotFoundException('Template ' . $templateFilepath . ' not found!');
-            throw $e->templateFile($templateFilepath);
+        if (!$path)
+        {
+            $traceString = '';
+
+            if ($parentTemplateFilePath && $parentTemplateLine && $parentTemplateOffset)
+                $traceString = ', included from "' .$parentTemplateFilePath. '" on line ' .$parentTemplateLine. ', offset ' .$parentTemplateOffset;
+
+            $e = new Tpl\NotFoundException('Template ' . $originalTemplate . ' not found' .$traceString);
+            throw $e->templateFile($originalTemplate);
         }
-        
+
+        /**
+         * Check if there is an already compiled version
+         *
+         * @config bool allow_compile
+         */
         if (!$this->config['allow_compile'])
         {
             // check if there is a compiled version
@@ -284,18 +338,21 @@ class Tpl {
             {
                 // allow first compilation of file
                 if (!$this->config['allow_compile_once'])
-                    throw new \Exception('Template cache file "' .$parsedTemplateFilepath. '" is missing and "allow_compile", "allow_compile_once" are disabled in configuration');
+                    throw new NotFoundException('Template cache file "' .$parsedTemplateFilepath. '" is missing and "allow_compile", "allow_compile_once" are disabled in configuration');
                     
             } else
                 return $parsedTemplateFilepath;
         }
-        
-        // Compile the template if the original has been updated or if force compilation is enabled, remember to set allow_compile to True
-        if ( $this->config['debug'] or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($templateFilepath) ) ) {
+
+        /**
+         * Run the parser if file was not updated since last compilation time
+         */
+        if ( $this->config['debug'] or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($path)))
+        {
             $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
-            $parser->compileFile($templateName, $templateBasedir, $templateDirectory, $templateFilepath, $parsedTemplateFilepath);
-            
+            $parser->compileFile($path, $parsedTemplateFilepath);
         }
+
         return $parsedTemplateFilepath;
     }
 
