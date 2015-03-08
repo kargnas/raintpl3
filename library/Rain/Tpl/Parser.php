@@ -849,6 +849,24 @@ class Parser
         $part = "<?php echo ".$this->parseModifiers($function). ";?>";
     }
 
+    /**
+     * {include} block parser
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @param $templateFilePath
+     * @param $blockIndex
+     * @param $blockPositions
+     * @param $code
+     *
+     * @throws NotFoundException
+     * @throws SyntaxException
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+
     public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code)
     {
         $lowerPart = strtolower($part);
