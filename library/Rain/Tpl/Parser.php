@@ -643,7 +643,7 @@ class Parser
         $equalsPos = strpos($part, '=');
         $firstModificator = strpos($part, "|");
 
-        if ($equalsPos !== false && ($firstModificator === false || $equalsPos < $firstModificato))
+        if ($equalsPos !== false && ($firstModificator === false || $equalsPos < $firstModificator))
         {
             $part = "<?php " . $this->parseModifiers($var, true) . ";?>";
             return true;
@@ -831,6 +831,12 @@ class Parser
         if ($isDirectFunction || $isString)
         {
             $function = substr($part, 1, strlen($part) - 2);
+
+            // integration with embedded JSON in Javascript eg. $(this).css({'color': '#343e4a'});
+            $quote = self::strposa(trim($function), array('"', "'"), 1);
+
+            if ($quote !== false && substr(str_replace(' ', '', $function), $quote + 1, 1) == ':')
+                return true;
 
         } else {
             $count = 2;
@@ -1171,5 +1177,27 @@ class Parser
         }
 
         return $result;
+    }
+
+    /**
+     * Strpos function that handles list of needles
+     *
+     * @param string $haystack Input string
+     * @param array $needles List of needles in array
+     * @param int $offset (Optional) Offset we are starting from
+     * @return bool|mixed
+     */
+    public static function strposa($haystack, $needles = array(), $offset = 0)
+    {
+        $chr = array();
+
+        foreach($needles as $needle)
+        {
+            $res = strpos($haystack, $needle, $offset);
+            if ($res !== false) $chr[$needle] = $res;
+        }
+
+        if(empty($chr)) return false;
+        return min($chr);
     }
 }
