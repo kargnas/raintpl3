@@ -998,6 +998,24 @@ class Parser
         // loop variables
         $counter = "\$counter".$valuesPrefix;
 
+        // RainTPL3/PHP syntax support: {loop="$array" as $key => $value} (only if there are no key and value arguments - to gain performance)
+        if (!isset($arguments['key']) && !isset($arguments['value']))
+        {
+            $asSyntax = strpos($part, 'as $');
+
+            if ($asSyntax !== false)
+            {
+                // the key is between "as $" and "=>"
+                $keyEnds = strpos($part, '=>', $asSyntax);
+                $arguments['key'] = trim(substr($part, ($asSyntax + 4), ($keyEnds - $asSyntax) - 4));
+
+                // between: $ and [space] or } (tag ending or arguments separator)
+                $valueStarts = strpos($part, '$', $keyEnds);
+                $valueEnds = self::strposa($part, array(' ', '}'), $valueStarts);
+                $arguments['value'] = substr($part, ($valueStarts + 1), ($valueEnds - $valueStarts) - 1);
+            }
+        }
+
         // key
         if (isset($arguments['key']))
             $key = "\$".$arguments['key'];
