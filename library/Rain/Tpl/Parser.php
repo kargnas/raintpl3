@@ -866,7 +866,6 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return bool
      */
-
     public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code)
     {
         $lowerPart = strtolower($part);
@@ -961,9 +960,11 @@ class Parser
 
         // validate if its a {loop} or {foreach} tag
         if (substr($part, 0, 5) != '{loop' && substr($part, 0, 8) != '{foreach')
-        {
             return false;
-        }
+
+        // increase the loop counter
+        $tagData['count']++;
+        $tagData['level']++;
 
         $arguments = $this->parseTagArguments($part);
         $var = null;
@@ -979,36 +980,14 @@ class Parser
         if (!$var)
             throw new SyntaxException("Syntax error in foreach/loop, there is no array given to iterate on. Code: ".$part);
 
-        // increase the loop counter
-        $tagData['count']++;
-        $tagData['level']++;
-
-        //replace the variable in the loop
-        //$var = $this->varReplace($var, $tagData['level'] - 1, false);
-
-        // prefix, example: $value1, $value2 etc. by default shoud be just $value
-        $valuesPrefix = '';
-
-        if ($tagData['level'] > 0)
-            $valuesPrefix = $tagData['level'];
+        // prefix, example: $value1, $value2 etc. by default should be just $value
+        $valuesPrefix = intval($tagData['level']);
 
         // check variable black list
         $this->blackList($var);
 
-        if (preg_match('#\(#', $var))
-        {
-            $newvar = "\$newvar{$valuesPrefix}";
-            $assignNewVar = "$newvar=$var;";
-        } else {
-            $newvar = $var;
-            $assignNewVar = null;
-        }
-
         // replace array modificators eg. $array.test to $array["test"]
-        $newvar = $this->varReplace($newvar, null, false, false, false);
-
-        if ($assignNewVar)
-            $assignNewVar = $this->varReplace($newvar, null, false, false, false);
+        $newvar = $this->varReplace($var, ($valuesPrefix - 1), false, false, false);
 
         // loop variables
         $counter = "\$counter".$valuesPrefix;
