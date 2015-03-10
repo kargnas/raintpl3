@@ -781,27 +781,68 @@ class Parser
     {
         $lowerPart = strtolower($part);
 
-        if (substr($lowerPart, 0, 2) === '{*' || $lowerPart === '{*}' || $lowerPart === '{ignore}')
+        if (substr($lowerPart, -2) === '*}' || $lowerPart === '{/*}' || $lowerPart === '{/ignore}')
         {
+            $tagData['level']--;
+            $passAllBlocksTo = '';
+            $part = '';
+            return true;
+
+        } elseif (substr($lowerPart, 0, 2) === '{*' || $lowerPart === '{*}' || $lowerPart === '{ignore}') {
             $tagData['level']++;
             $tagData['count']++;
             $passAllBlocksTo = 'comment';
             $part = '';
             return true;
+        }
 
-        } elseif (substr($lowerPart, -2) === '*}' || $lowerPart === '{/*}' || $lowerPart === '{/ignore}') {
+        // erase all inside a comment block
+        else if ($passAllBlocksTo === 'comment' && $tagData['level'] > 0)
+        {
+            $part = '';
+            return true;
+        }
+    }
+
+    /**
+     * Code parsing ignore block {noparse}, {literal}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @param $templateFilePath
+     * @param $blockIndex
+     * @param $blockPositions
+     * @param $code
+     * @param $passAllBlocksTo
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+    protected function noparseBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo)
+    {
+        $lowerPart = strtolower($part);
+
+        if ($lowerPart == '{/noparse}' || $lowerPart == '{/literal}')
+        {
             $tagData['level']--;
             $passAllBlocksTo = '';
             $part = '';
             return true;
         }
 
-        // erase all inside a comment block
-        if ($passAllBlocksTo === 'comment' && $tagData['level'] > 0)
+        elseif ($lowerPart == '{noparse}' || $lowerPart == '{literal}')
         {
+            $tagData['level']++;
+            $tagData['count']++;
+            $passAllBlocksTo = 'noparse';
             $part = '';
             return true;
         }
+
+        // inside {noparse} ... {/noparse} block ignore all data
+        else if ($passAllBlocksTo === 'noparse' && $tagData['level'] > 0)
+            return true;
     }
 
     /**
@@ -999,7 +1040,7 @@ class Parser
         $counter = "\$counter".$valuesPrefix;
 
         // RainTPL3/PHP syntax support: {loop="$array" as $key => $value} (only if there are no key and value arguments - to gain performance)
-        if (!isset($arguments['key']) && !isset($arguments['value']))
+        if (!isset($arguments['key']) && !isset($arguments['value']) && !isset($arguments['item']))
         {
             $asSyntax = strpos($part, 'as $');
 
