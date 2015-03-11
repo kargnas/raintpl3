@@ -684,13 +684,7 @@ class Parser
             $result = $this->parseModifiers($result);
         }
 
-        if (!defined($constantName))
-        {
-            $part = '';
-            return true;
-        }
-
-        $part = '<?=' .$result. ';?>';
+        $part = '<?php if(defined("' .$constantName. '")){echo ' .$result. ';};?>';
         return true;
     }
 
