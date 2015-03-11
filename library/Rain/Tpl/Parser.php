@@ -51,7 +51,7 @@ class Parser
         // @TODO: Ternary operator (short if)
         // @TODO: {#Constant#}
         // @TODO: {autoescape} for escaping HTML code inside
-        // @TODO: {point a} {moveto a}
+        // @TODO: {mark a} {goto a}
 
         'variable' => true, // {$} RainTPL3.1
         'if' => true, // {if}, {elseif} RainTPL3.1
@@ -67,8 +67,8 @@ class Parser
         'noparse' => true, // {noparse}, {literal} RainTPL3.1
         'ternary' => true,
         'comment' => true, // {*}, {ignore} RainTPL3.1
-        'constant' => true,
-        'point' => true,
+        'constant' => true, // {#CONSTANT_NAME#} RainTPL3.1
+        'mark' => true, // {mark a} {goto a}
     );
 
     /**
@@ -956,6 +956,42 @@ class Parser
             $part = '';
             return true;
         }
+    }
+
+    /**
+     * Parse template marks
+     *
+     * Example:
+     * {goto a}
+     * {mark a}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @param $templateFilePath
+     * @param $blockIndex
+     * @param $blockPositions
+     * @param $code
+     * @param $passAllBlocksTo
+     * @param $lowerPart
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+    public function markBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
+    {
+        $zeroFive = substr($lowerPart, 0, 5);
+
+        if ($zeroFive == '{mark')
+        {
+            $part = "<?php " .trim(substr($lowerPart, 5, -1)). ":?>";
+            return true;
+        } elseif ($zeroFive == '{goto') {
+            $part = '<?php goto ' .trim(substr($lowerPart, 5, -1)). ';?>';
+            return true;
+        }
+
+        return false;
     }
 
     /**
