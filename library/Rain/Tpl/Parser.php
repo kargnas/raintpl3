@@ -426,7 +426,7 @@ class Parser
                         }
 
                         $result = call_user_func_array($method, array(
-                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code, &$passAllBlocksTo,
+                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code, &$passAllBlocksTo, strtolower($part),
                         ));
 
                         $codeSplit[$index] = $part;
@@ -711,9 +711,8 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return bool
      */
-    protected function captureBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo)
+    protected function captureBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $lowerPart = strtolower($part);
         $ending = $this->parseTagEnding($part, 'capture');
 
         if (substr($lowerPart, 0, 8) !== '{capture' && !$ending)
@@ -782,9 +781,8 @@ class Parser
      *
      * @return null|bool
      */
-    protected function ifBlockParser(&$tagData, &$part, &$tag)
+    protected function ifBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $lowerPart = strtolower($part);
         $ending = $this->parseTagEnding($lowerPart, array(
             'if', 'elseif'
         ));
@@ -887,10 +885,8 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return bool
      */
-    protected function commentBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo)
+    protected function commentBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $lowerPart = strtolower($part);
-
         if (substr($lowerPart, -2) === '*}' || $lowerPart === '{/*}' || $lowerPart === '{/ignore}')
         {
             $tagData['level']--;
@@ -929,10 +925,8 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return bool
      */
-    protected function noparseBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo)
+    protected function noparseBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $lowerPart = strtolower($part);
-
         if ($lowerPart == '{/noparse}' || $lowerPart == '{/literal}')
         {
             $tagData['level']--;
@@ -1023,10 +1017,8 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return bool
      */
-    public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code)
+    public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $lowerPart = strtolower($part);
-
         if(substr($lowerPart, 0, 8) !== '{include')
             return false;
 
@@ -1095,10 +1087,8 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return null
      */
-    protected function loopBlockParser(&$tagData, &$part, &$tag)
+    protected function loopBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $lowerPart = strtolower($part);
-
         $ending = $this->parseTagEnding($lowerPart, array(
             'loop', 'foreach',
         ));
