@@ -1233,14 +1233,15 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return null|void
      */
-    protected function loop_breakBlockParser(&$tagData, &$part, &$tag)
+    protected function loop_breakBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $p = strtolower($part);
-
-        if ($p == '{break}')
+        if ($lowerPart == '{break}')
         {
-            if ((isset($this->tagData['foreach']['level']) || $this->tagData['foreach']['level'] < 1) && (isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1))
-                throw new SyntaxException('Trying to use {break} outside of a loop');
+            if (!isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1)
+            {
+                $context = $this->findLine($blockIndex, $blockPositions, $code);
+                throw new SyntaxException('Trying to use {break} outside of a loop', 6, null, $context['line'], $templateFilePath);
+            }
 
             $part = '<?php break;?>';
         }
@@ -1256,16 +1257,18 @@ class Parser
      * @author Damian Kęska <damian.keska@fingo.pl>
      * @return null|void
      */
-    protected function loop_continueBlockParser(&$tagData, &$part, &$tag)
+    protected function loop_continueBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $p = strtolower($part);
-
-        if ($p == '{continue}')
+        if ($lowerPart === '{continue}')
         {
-            if ((isset($this->tagData['foreach']['level']) || $this->tagData['foreach']['level'] < 1) && (isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1))
-                throw new SyntaxException('Trying to use {continue} outside of a loop');
+            if (!isset($this->tagData['loop']['level']) || $this->tagData['loop']['level'] < 1)
+            {
+                $context = $this->findLine($blockIndex, $blockPositions, $code);
+                throw new SyntaxException('Trying to use {continue} outside of a loop', 6, null, $context['line'], $templateFilePath);
+            }
 
             $part = '<?php continue;?>';
+            return true;
         }
     }
 
