@@ -337,6 +337,10 @@ class Parser
     {
         $parsedCode = '';
 
+        // statistics
+        $compilationTime = microtime(true);
+        $blockIterations = 0;
+
         // execute plugins, before parse
         $context = static::getPlugins()->createContext(array(
             'code' => $code,
@@ -362,11 +366,16 @@ class Parser
         // new code
         if ($codeSplit)
         {
+            // pre-detect option (could speed up compilation time)
+            $preDetect = (isset($this->config['pre_detect']) && $this->config['pre_detect']);
+            $profiler = (isset($this->config['profiler']) && $this->config['profiler']);
+
             // pass all blocks to this parser
             $passAllBlocksTo = '';
             $this->tagData = array(
 
             );
+            $tags = &static::$tags;
 
             // uncomment line below to take a look what we have to parse
             // var_dump($codeSplit);
@@ -395,8 +404,38 @@ class Parser
                 // tag parser found?
                 $found = false;
 
-                foreach (static::$tags as $tagName => $tag)
+                /**
+                 * Try to read tag name to choose best block parser quickly as possible
+                 *
+                 * @author Damian Kęska <damian.keska@fingo.pl>
+                 */
+                if ($preDetect)
                 {
+                    $tags = static::$tags;
+                    $preDetectTag = substr($part, self::strposa($part, array('/', '{'), 0, 'max') + 1);
+                    $preDetectTag = substr($preDetectTag, 0, self::strposa($preDetectTag, array(
+                        ' ', '=', '}',
+                    )));
+
+                    if (isset(static::$tags[$preDetectTag]) && static::$tags[$preDetectTag])
+                    {
+                        unset($tags[$preDetectTag]);
+
+                        $tags = array(
+                            $preDetectTag => true,
+                        ) + $tags;
+                    }
+                }
+
+                /**
+                 * Go through all block parsers
+                 *
+                 * @author Damian Kęska <damian.keska@fingo.pl>
+                 */
+                foreach ($tags as $tagName => $tag)
+                {
+                    $blockIterations++;
+
                     if ($passAllBlocksTo)
                         $tagName = $passAllBlocksTo;
 
@@ -422,9 +461,12 @@ class Parser
                             $this->tagData[$tagName] = array(
                                 'level' => 0,
                                 'count' => 0,
+                                'totalParseTime' => 0,
+                                'profile' => array(),
                             );
                         }
 
+                        $parseTime = microtime(true);
                         $result = call_user_func_array($method, array(
                             &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code, &$passAllBlocksTo, strtolower($part),
                         ));
@@ -433,6 +475,11 @@ class Parser
 
                         if ($codeSplit[$index] !== $originalPart || $result === true)
                         {
+                            $this->tagData[$tagName]['totalParseTime'] += (microtime(true) - $parseTime);
+
+                            if ($profiler)
+                                $this->tagData[$tagName]['profile'][$index] = (microtime(true) - $parseTime);
+
                             $found = true;
                             break;
                         }
@@ -473,9 +520,10 @@ class Parser
             exit;
         }
 
-        // Execute plugins, after_parse
+        // execute plugins, after_parse
         $context->code = $parsedCode;
         static::getPlugins()->run('afterParse', $context);
+        $compilationTime = (microtime(true) - $compilationTime);
 
         return $context->code;
     }
@@ -1344,9 +1392,10 @@ class Parser
      * @param string $haystack Input string
      * @param array $needles List of needles in array
      * @param int $offset (Optional) Offset we are starting from
+     * @param callable $f (Optional) Function that selects best option (Defaults to min)
      * @return bool|mixed
      */
-    public static function strposa($haystack, $needles = array(), $offset = 0)
+    public static function strposa($haystack, $needles = array(), $offset = 0, $f = 'min')
     {
         $chr = array();
 
@@ -1357,6 +1406,6 @@ class Parser
         }
 
         if(empty($chr)) return false;
-        return min($chr);
+        return $f($chr);
     }
 }
