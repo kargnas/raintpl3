@@ -46,9 +46,12 @@ class Parser
 
     // tags natively supported
     protected static $tags = array(
-        // @TODO: {capture}
         // @TODO: {block}
-        // @TODO: support for syntax "as $key => $value" in {loop} and {foreach}
+        // @TODO: {foreach type="array"} Strict type setting to minimize output code
+        // @TODO: Ternary operator (short if)
+        // @TODO: {#Constant#}
+        // @TODO: {autoescape} for escaping HTML code inside
+        // @TODO: {point a} {moveto a}
 
         'variable' => true, // {$} RainTPL3.1
         'if' => true, // {if}, {elseif} RainTPL3.1
@@ -58,11 +61,14 @@ class Parser
         'loop_break' => true, // RainTPL3.1
         'loop_continue' => true, // RainTPL3.1
         'include' => true, // RainTPL3.1
+        'capture' => true, // RainTPL3.1
+        'block' => true,
         'autoescape' => true,
-        'noparse' => true,
+        'noparse' => true, // {noparse}, {literal} RainTPL3.1
         'ternary' => true,
         'comment' => true, // {*}, {ignore} RainTPL3.1
         'constant' => true,
+        'point' => true,
     );
 
     /**
@@ -634,7 +640,7 @@ class Parser
      */
     protected function variableBlockParser(&$tagData, &$part, &$tag)
     {
-        if (substr($part, 0, 2) != '{$')
+        if (substr($part, 0, 2) !== '{$')
             return false;
 
         $var = substr($part, 1, (strlen($part) - 2));
@@ -651,6 +657,117 @@ class Parser
 
         // variables substitution (eg. {$title})
         $part = "<?=" . $this->parseModifiers($var, true) . ";?>";
+        return true;
+    }
+
+    /**
+     * Parse a simple constant tag {#CONSTANT_NAME#}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+    protected function constantBlockParser(&$tagData, &$part, &$tag)
+    {
+        if (substr($part, 0, 2) !== '{#')
+            return false;
+
+        $constantName = $result = trim(substr($part, 2, -2));
+        $hasModifiers = strpos($constantName, '|');
+
+        if ($hasModifiers !== false)
+        {
+            $constantName = substr($constantName, 0, $hasModifiers);
+            $result = $this->parseModifiers($result);
+        }
+
+        if (!defined($constantName))
+        {
+            $part = '';
+            return true;
+        }
+
+        $part = '<?=' .$result. ';?>';
+        return true;
+    }
+
+    /**
+     * {capture} tag block parser
+     *
+     * Examples:
+     * {capture name="test"}This is a test HTML part of code{/capture}
+     * {capture assign="test"}This is a test HTML part of code{/capture}
+     * {capture append="test"}, and this text was appended to existing capture{/capture}
+     *
+     * Test this example with: {var_dump($test)}
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @param $templateFilePath
+     * @param $blockIndex
+     * @param $blockPositions
+     * @param $code
+     * @param $passAllBlocksTo
+     * @throws SyntaxException
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool
+     */
+    protected function captureBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo)
+    {
+        $lowerPart = strtolower($part);
+        $ending = $this->parseTagEnding($part, 'capture');
+
+        if (substr($lowerPart, 0, 8) !== '{capture' && !$ending)
+            return false;
+
+        /**
+         * {/capture} => ob_get_clean();
+         */
+        if ($ending)
+        {
+            if ($tagData['level'] < 1)
+            {
+                $context = $this->findLine($blockIndex, $blockPositions, $code);
+                throw new SyntaxException('{capture} tag closed before it was opened, in "' .$templateFilePath. '" on line ' .$context['line']. ', offset ' .$context['offset'], 5, null, $context['line'], $templateFilePath);
+            }
+
+            $tagData['level']--;
+            $part = '<?php $' .$tagData['assign'] . $tagData['operator']. 'ob_get_clean();?>';
+
+            // clean up
+            unset($tagData['assign']); unset($tagData['operator']);
+            return true;
+        }
+
+        $arguments = $this->parseTagArguments($part);
+        $tagData['operator'] = '=';
+
+        /**
+         * Look for name, assign or append tag
+         * {capture name="asd"}
+         * {capture assign="asd"}
+         * {capture append="asd"}
+         */
+        if (isset($arguments['assign']))
+            $tagData['assign'] = $arguments['assign'];
+        elseif (isset($arguments['name']))
+            $tagData['assign'] = $arguments['name'];
+        elseif (isset($arguments['append'])) {
+            $tagData['assign'] = $arguments['append'];
+            $tagData['operator'] = '.=';
+        } else {
+            $context = $this->findLine($blockIndex, $blockPositions, $code);
+            throw new SyntaxException('{assign} tag requires at least one of properties to be used: assign, name or append. In "' .$templateFilePath. '" on line ' .$context['line']. ', offset ' .$context['offset'], 6, null, $context['line'], $templateFilePath);
+        }
+
+        $tagData['count']++;
+        $tagData['level']++;
+        $part = '<?php ob_start();?>';
         return true;
     }
 
@@ -691,7 +808,6 @@ class Parser
         /**
          * {if} - opening
          */
-
         $tagType = substr($lowerPart, 0, 4);
         $elseTagType = substr($lowerPart, 0, 8);
 
@@ -731,7 +847,6 @@ class Parser
         }
 
         $part = '<?php ' .$type. '(' .$this->varReplace(substr($part, $len + $posX, (strlen($part) - ($posY + $len + $posX))), $this->tagData['loop']['level'], $escape = FALSE). '){?>';
-
         return true;
     }
 
@@ -759,6 +874,7 @@ class Parser
             }
 
             $part = '<?php }else{?>';
+            return true;
         }
     }
 
