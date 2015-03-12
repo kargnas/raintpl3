@@ -60,13 +60,13 @@ class Parser
         'loop_continue' => true, // RainTPL3.1
         'include' => true, // RainTPL3.1
         'capture' => true, // RainTPL3.1
-        'block' => true,
+        'block' => true, // {block} RainTPL3.1
         'autoescape' => true,
         'noparse' => true, // {noparse}, {literal} RainTPL3.1
         'ternary' => true,
         'comment' => true, // {*}, {ignore} RainTPL3.1
         'constant' => true, // {#CONSTANT_NAME#} RainTPL3.1
-        'mark' => true, // {mark a} {goto a}
+        'mark' => true, // {mark a} {goto a} RainTPL3.1
     );
 
     /**
@@ -234,7 +234,7 @@ class Parser
      * Split code into parts that should contain {code} tavar_dump($templateFilepath);gs and HTML as separate elements
      *
      * @param string $code Input TPL code
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return array
      */
     protected function prepareCodeSplit($code)
@@ -329,6 +329,7 @@ class Parser
      * @param $templateFilepath
      * @throws \Rain\Tpl_Exception
      * @throws string
+     *
      * @return null|string
      */
     protected function compileTemplate($code, $templateFilepath)
@@ -374,6 +375,7 @@ class Parser
 
             );
             $tags = static::$tags;
+            $templateEnding = '';
 
             // uncomment line below to take a look what we have to parse
             // var_dump($codeSplit);
@@ -389,7 +391,7 @@ class Parser
              * 2. $this->blockParserCallbacks[{tagName}]()
              * 3. {tagName}()
              *
-             * @author Damian Kęska <damian.keska@fingo.pl>
+             * @author Damian Kęska <damian@pantheraframework.org>
              */
             foreach ($codeSplit as $index => $part)
             {
@@ -405,7 +407,7 @@ class Parser
                 /**
                  * Try to read tag name to choose best block parser quickly as possible
                  *
-                 * @author Damian Kęska <damian.keska@fingo.pl>
+                 * @author Damian Kęska <damian@pantheraframework.org>
                  */
                 if ($preDetect)
                 {
@@ -431,7 +433,7 @@ class Parser
                 /**
                  * Go through all block parsers
                  *
-                 * @author Damian Kęska <damian.keska@fingo.pl>
+                 * @author Damian Kęska <damian@pantheraframework.org>
                  */
                 foreach ($tags as $tagName => $tag)
                 {
@@ -469,7 +471,7 @@ class Parser
 
                         $parseTime = microtime(true);
                         $result = call_user_func_array($method, array(
-                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code, &$passAllBlocksTo, strtolower($part),
+                            &$this->tagData[$tagName], &$part, &$tag, $templateFilepath, $index, $blockPositions, $code, &$passAllBlocksTo, strtolower($part), &$codeSplit, &$templateEnding,
                         ));
 
                         $codeSplit[$index] = $part;
@@ -510,12 +512,13 @@ class Parser
             $parsedCode = join('', $codeSplit);
         }
 
+        // add code that should be at the end of template
+        $parsedCode .= $templateEnding;
+
         // optimize output
         $parsedCode = str_replace('?><?php', '', $parsedCode);
 
-        //$this->config['print_parsed_code'] = true;
-
-        if ($this->config['print_parsed_code'])
+        if (isset($this->config['print_parsed_code']) && $this->config['print_parsed_code'])
         {
             print($parsedCode);
             exit;
@@ -525,8 +528,6 @@ class Parser
         $context->code = $parsedCode;
         static::getPlugins()->run('afterParse', $context);
         $compilationTime = (microtime(true) - $compilationTime);
-
-        var_dump($blockIterations. ' - ' .$compilationTime);
 
         return $context->code;
     }
@@ -538,7 +539,7 @@ class Parser
      * @param array $codeSplit Splitted code (and not only code) parts
      * @param array $blockPositions Index of positions of all splitted code parts
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return array
      */
     protected function findLine($partIndex, $blockPositions, $code)
@@ -606,7 +607,7 @@ class Parser
      *
      * @param string $tagBody Tag body string
      * @param array|string $endings Possible endings, or ending (if passed a string)
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
     protected function parseTagEnding($tagBody, $endings)
@@ -686,7 +687,7 @@ class Parser
      * @param $part
      * @param $tag
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return null
      */
     protected function variableBlockParser(&$tagData, &$part, &$tag)
@@ -718,7 +719,7 @@ class Parser
      * @param $part
      * @param $tag
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
     protected function constantBlockParser(&$tagData, &$part, &$tag)
@@ -759,7 +760,7 @@ class Parser
      * @param $passAllBlocksTo
      * @throws SyntaxException
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
     protected function captureBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -816,6 +817,69 @@ class Parser
     }
 
     /**
+     * {block} tag parser
+     *
+     * @param $tagData
+     * @param $part
+     * @param $tag
+     * @param $templateFilePath
+     * @param $blockIndex
+     * @param $blockPositions
+     * @param $code
+     * @param $passAllBlocksTo
+     * @param $lowerPart
+     * @param $codeSplit
+     *
+     * @throws SyntaxException
+     * @author Damian Kęska <damian@pantheraframework.org>
+     *
+     * @return bool
+     */
+
+    protected function blockBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart, &$codeSplit)
+    {
+        $ending = $this->parseTagEnding($lowerPart, 'block');
+
+        if (substr($lowerPart, 0, 6) !== '{block' && !$ending)
+            return false;
+
+        if ($ending)
+        {
+            // if tag body is empty eg. {block name="testBlockName"}{/block} then just call existing block
+            if (($blockIndex - 1) === $tagData['lastOpenIndex'])
+            {
+                $codeSplit[$tagData['lastOpenIndex']] = '';
+                $part = '<?php if(isset($this->definedBlocks["' .$tagData['args']['name']. '"])){echo $this->definedBlocks["' .$tagData['args']['name']. '"]();}?>';
+                return true;
+            }
+
+            $part = '<?php };}';
+            $isExtended = isset($this->tagData['include']) && $this->tagData['include']['extends'];
+
+            if (!$isExtended && (!isset($tagData['args']['quiet']) || $tagData['args']['quiet'] != 'true'))
+                $part .= 'echo $this->definedBlocks["' .$tagData['args']['name']. '"]();';
+
+            $part .= '?>';
+            return true;
+
+        } else {
+            $args = $this->parseTagArguments($part);
+
+            if (!isset($args['name']) || !$args['name'])
+            {
+                $context = $this->findLine($blockIndex, $blockPositions, $code);
+                throw new SyntaxException('{block} tag requires "name" argument, in file "' .$templateFilePath. '" on line ' .$context['line']. ', offset ' .$context['offset'], 7, null, $context['line'], $templateFilePath);
+            }
+
+            $tagData['args'] = $args;
+            $tagData['lastOpenIndex'] = $blockIndex;
+
+            $part = '<?php if(!isset($this->definedBlocks["' .$args['name']. '"])){$this->definedBlocks["' .$args['name']. '"]=function(){$args = ' .var_export($args, true). ';?>';
+            return true;
+        }
+    }
+
+    /**
      * {if} code block parser
      *
      * Examples:
@@ -828,7 +892,7 @@ class Parser
      *
      * @regex /{if="([^"]*)"}/
      * @regex ({if.*?})
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      *
      * @return null|bool
      */
@@ -901,7 +965,7 @@ class Parser
      * @param $tag
      *
      * @throws SyntaxException
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return null|void
      */
     protected function elseBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code)
@@ -933,7 +997,7 @@ class Parser
      * @param $code
      * @param $passAllBlocksTo
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
     protected function commentBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -978,7 +1042,7 @@ class Parser
      * @param $passAllBlocksTo
      * @param $lowerPart
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
     public function markBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -1009,7 +1073,7 @@ class Parser
      * @param $code
      * @param $passAllBlocksTo
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
     protected function noparseBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -1049,7 +1113,7 @@ class Parser
      * @param string $part
      * @param string $tag
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return null|void
      */
     protected function functionBlockParser(&$tagData, &$part, &$tag)
@@ -1088,7 +1152,7 @@ class Parser
     }
 
     /**
-     * {include} block parser
+     * {include}, {extends} block parser
      *
      * @param $tagData
      * @param $part
@@ -1101,12 +1165,14 @@ class Parser
      * @throws NotFoundException
      * @throws SyntaxException
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return bool
      */
-    public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
+    public function includeBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart, &$codeSplit, &$templateEnding)
     {
-        if(substr($lowerPart, 0, 8) !== '{include')
+        $pTag = substr($lowerPart, 0, 8);
+
+        if($pTag !== '{include' && $pTag !== '{extends')
             return false;
 
         $tagBody = substr($part, 8, strlen($part) - 9);
@@ -1131,6 +1197,7 @@ class Parser
         // resolved path
         $path = '';
         $context = $this->findLine($blockIndex, $blockPositions, $code);
+        $found = false;
 
         // select in all include paths
         if (isset($this->config['tpl_dir']))
@@ -1141,11 +1208,26 @@ class Parser
             if ($path)
             {
                 $part = '<?php require $this->checkTemplate("' . $path . '", "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
-                return true;
+                $found = true;
 
             } elseif (substr($includeTemplate, 0, 1) == '$' || defined($includeTemplate)) {
 
                 $part = '<?php require $this->checkTemplate(' . $includeTemplate . ', "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
+                $found = true;
+            }
+
+            if ($found)
+            {
+                if ($pTag === '{extends')
+                {
+                    $templateEnding .= $part;
+                    $part = '';
+
+                    // add to counter
+                    if (!isset($tagData['extends'])) $tagData['extends'] = 0;
+                    $tagData['extends']++;
+                }
+
                 return true;
             }
 
@@ -1171,7 +1253,7 @@ class Parser
      * @param $tag
      *
      * @throws SyntaxException
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return null
      */
     protected function loopBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -1269,7 +1351,7 @@ class Parser
      * @param $tag
      *
      * @throws SyntaxException
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return null|void
      */
     protected function loop_breakBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -1293,7 +1375,7 @@ class Parser
      * @param $part
      * @param $tag
      * @throws SyntaxException
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return null|void
      */
     protected function loop_continueBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
@@ -1389,7 +1471,7 @@ class Parser
      *
      * @param string $var Variable/string/function input string
      *
-     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @author Damian Kęska <damian@pantheraframework.org>
      * @return string Output
      */
     protected function parseModifiers($var, $useVarReplace = false)

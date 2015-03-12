@@ -50,6 +50,11 @@ class Tpl {
     // tags registered by the developers
     protected static $registered_tags = array();
 
+    // here should be all blocks defined in code
+    protected $definedBlocks = array(
+
+    );
+
 
     /**
      * Draw the template
@@ -100,7 +105,8 @@ class Tpl {
      *
      * @return void, string: depending of the $toString
      */
-    public function drawString($string, $toString = false) {
+    public function drawString($string, $toString = false)
+    {
         return $this->draw($string, $toString, True);
     }
     
@@ -112,7 +118,8 @@ class Tpl {
      * @param mixed $value: value of the setting to configure
      * @return \Rain\Tpl $this
      */
-    public function objectConfigure($setting, $value = null) {
+    public function objectConfigure($setting, $value = null)
+    {
         if (is_array($setting))
         {
             // use this function recursive to set multiple configuration values from array
@@ -133,7 +140,8 @@ class Tpl {
      * or associative array type 'setting' => 'value'
      * @param mixed $value: value of the setting to configure
      */
-    public static function configure($setting, $value = null) {
+    public static function configure($setting, $value = null)
+    {
         if (is_array($setting))
         {
             // use this function recursive to set multiple configuration values from array
@@ -163,7 +171,8 @@ class Tpl {
      *
      * @return \Rain\Tpl $this
      */
-    public function assign($variable, $value = null) {
+    public function assign($variable, $value = null)
+    {
         if (is_array($variable))
             $this->var = $variable + $this->var;
         else
@@ -221,7 +230,8 @@ class Tpl {
      *
      * @return \Rain\Tpl\PluginContainer
      */
-    protected static function getPlugins() {
+    protected static function getPlugins()
+    {
         return static::$plugins
             ?: static::$plugins = new Tpl\PluginContainer();
     }
