@@ -131,6 +131,7 @@ class Parser
     {
         // open the template
         $fp = fopen($templateFilepath, "r");
+        $parsedCode = '';
 
         // lock the file
         if (flock($fp, LOCK_SH))
@@ -340,15 +341,18 @@ class Parser
         $compilationTime = microtime(true);
         $blockIterations = 0;
 
-        // execute plugins, before parse
-        $context = static::getPlugins()->createContext(array(
-            'code' => $code,
-            'template_filepath' => $templateFilepath,
-            'conf' => $this->config,
-        ));
+        if (isset($this->config['raintpl3_plugins_compatibility']) && $this->config['raintpl3_plugins_compatibility'])
+        {
+            // execute plugins, before parse
+            $context = static::getPlugins()->createContext(array(
+                'code' => $code,
+                'template_filepath' => $templateFilepath,
+                'conf' => $this->config,
+            ));
 
-        static::getPlugins()->run('beforeParse', $context);
-        $code = $context->code;
+            static::getPlugins()->run('beforeParse', $context);
+            $code = $context->code;
+        }
 
         // remove comments
         if ($this->config['remove_comments'])
@@ -525,11 +529,22 @@ class Parser
         }
 
         // execute plugins, after_parse
-        $context->code = $parsedCode;
-        static::getPlugins()->run('afterParse', $context);
-        $compilationTime = (microtime(true) - $compilationTime);
+        if (isset($this->config['raintpl3_plugins_compatibility']) && $this->config['raintpl3_plugins_compatibility'])
+        {
+            $context = static::getPlugins()->createContext(array(
+                'code' => $code,
+                'template_filepath' => $templateFilepath,
+                'conf' => $this->config,
+            ));
 
-        return $context->code;
+            $context->code = $parsedCode;
+            static::getPlugins()->run('afterParse', $context);
+            $compilationTime = (microtime(true) - $compilationTime);
+
+            $parsedCode = $context->code;
+        }
+
+        return $parsedCode;
     }
 
     /**
@@ -1425,7 +1440,7 @@ class Parser
 
     protected function blackList($html) {
 
-        if (!static::$conf['sandbox'] || !static::$black_list)
+        if (!isset(static::$conf['sandbox']) || !static::$conf['sandbox'] || !static::$black_list)
             return true;
 
         if (empty(static::$conf['black_list_preg']))

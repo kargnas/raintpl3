@@ -17,6 +17,7 @@ class TplTest extends PHPUnit_Framework_TestCase
 	{
 		Rain\Tpl::configure(array(
 			'debug' => true,
+            'raintpl3_plugins_compatibility' => true,
 			'tpl_dir' => __DIR__ . '/_files/',
 			'cache_dir' => __DIR__ . '/../../cache/',
 		));

@@ -35,6 +35,7 @@ class Tpl {
         'tpl_dir' => 'templates/',
         'cache_dir' => 'cache/',
         'tpl_ext' => 'html',
+        'ignore_single_quote' => true,
         'predetect' => true,
         'base_url' => '',
         'php_enabled' => false,
@@ -66,7 +67,8 @@ class Tpl {
      *
      * @return void, string: depending of the $toString
      */
-    public function draw($templateFilePath, $toString = FALSE, $isString = FALSE) {
+    public function draw($templateFilePath, $toString = FALSE, $isString = FALSE)
+    {
         extract($this->var);
         
         // Merge local and static configurations
@@ -82,14 +84,17 @@ class Tpl {
         
         $html = ob_get_clean();
 
-        // Execute plugins, before_parse
-        $context = $this->getPlugins()->createContext(array(
-            'code' => $html,
-            'conf' => $this->config,
-        ));
+        if (isset($this->config['raintpl3_plugins_compatibility']) && $this->config['raintpl3_plugins_compatibility'])
+        {
+            // Execute plugins, before_parse
+            $context = $this->getPlugins()->createContext(array(
+                'code' => $html,
+                'conf' => $this->config,
+            ));
 
-        $this->getPlugins()->run('afterDraw', $context);
-        $html = $context->code;
+            $this->getPlugins()->run('afterDraw', $context);
+            $html = $context->code;
+        }
 
         if ($toString)
             return $html;
@@ -100,8 +105,8 @@ class Tpl {
     /**
      * Draw a string
      *
-     * @param string $string: string in RainTpl format
-     * @param bool $toString: if the param
+     * @param string $string string in RainTpl format
+     * @param bool $toString if the param
      *
      * @return void, string: depending of the $toString
      */
@@ -221,7 +226,8 @@ class Tpl {
      *
      * @param string $name
      */
-    public static function removePlugin($name) {
+    public static function removePlugin($name)
+    {
         static::getPlugins()->removePlugin($name);
     }
 
@@ -360,15 +366,12 @@ class Tpl {
         // set filename
         $templateName = md5($string . implode($this->config['checksum']));
         $parsedTemplateFilepath = $this->config['cache_dir'] . $templateName . '.s.rtpl.php';
-        $templateFilepath = '';
-        $templateBasedir = '';
-
 
         // Compile the template if the original has been updated
         if ($this->config['debug'] || !file_exists($parsedTemplateFilepath))
         {
-            $parser = new Tpl\Parser($this->config, static::$plugins, static::$registered_tags);
-            $parser->compileString($templateName, $templateBasedir, $templateFilepath, $parsedTemplateFilepath, $string);
+            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+            $parser->compileString($templateName, $parsedTemplateFilepath, $string);
         }
 
         return $parsedTemplateFilepath;
