@@ -8,7 +8,7 @@ use Rain\Tpl;
  *  Realized by Federico Ulfo & maintained by the Rain Team
  *  Distributed under GNU/LGPL 3 License
  *
- *  @version 3.0 Alpha milestone: https://github.com/rainphp/raintpl3/issues/milestones?with_issues=no
+ *  @version 3.1 beta
  */
 class Parser
 {
@@ -49,9 +49,7 @@ class Parser
         // @TODO: {block}
         // @TODO: {foreach type="array"} Strict type setting to minimize output code
         // @TODO: Ternary operator (short if)
-        // @TODO: {#Constant#}
         // @TODO: {autoescape} for escaping HTML code inside
-        // @TODO: {mark a} {goto a}
 
         'variable' => true, // {$} RainTPL3.1
         'if' => true, // {if}, {elseif} RainTPL3.1
@@ -375,7 +373,7 @@ class Parser
             $this->tagData = array(
 
             );
-            $tags = &static::$tags;
+            $tags = static::$tags;
 
             // uncomment line below to take a look what we have to parse
             // var_dump($codeSplit);
@@ -416,6 +414,9 @@ class Parser
                     $preDetectTag = substr($preDetectTag, 0, self::strposa($preDetectTag, array(
                         ' ', '=', '}',
                     )));
+
+                    if ($preDetectTag == '$') $preDetectTag = 'variable';
+                    if ($preDetectTag == '#') $predetectTag = 'constant';
 
                     if (isset(static::$tags[$preDetectTag]) && static::$tags[$preDetectTag])
                     {
@@ -524,6 +525,8 @@ class Parser
         $context->code = $parsedCode;
         static::getPlugins()->run('afterParse', $context);
         $compilationTime = (microtime(true) - $compilationTime);
+
+        var_dump($blockIterations. ' - ' .$compilationTime);
 
         return $context->code;
     }
