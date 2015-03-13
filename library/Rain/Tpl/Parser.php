@@ -19,7 +19,7 @@ class Parser
               $objectConf = array();
 
     protected $config = array(
-        'ignore_single_quote' => true,
+        //'ignore_single_quote' => true,
     );
 
     /**
@@ -255,7 +255,7 @@ class Parser
                 break;
 
             $sChar = substr($code, $current + 1, 1);
-            $sCharMatch = (substr($code, $current + 1, 1) === ' ' || $sChar === "\t" || $sChar === "\n" || $sChar === "\r" || ($this->config['ignore_single_quote'] && $sChar === "'")); // condition that check if there is any space or special character after "{"
+            $sCharMatch = (substr($code, $current + 1, 1) === ' ' || $sChar === "\t" || $sChar === "\n" || $sChar === "\r" /*|| ($this->config['ignore_single_quote'] && $sChar === "'")*/); // condition that check if there is any space or special character after "{"
 
             if (!$sCharMatch)
             {
@@ -402,7 +402,7 @@ class Parser
                 // run tag parsers only on tags, exclude "{ " from parsing
                 $starts = substr($part, 1, 1);
 
-                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t" || ($this->config['ignore_single_quote'] && $starts == "'") || strpos($part, "\n") !== false)
+                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t"/* || ($this->config['ignore_single_quote'] && $starts == "'") */|| strpos($part, "\n") !== false)
                     continue;
 
                 // tag parser found?
@@ -1144,7 +1144,8 @@ class Parser
             $function = substr($part, 1, strlen($part) - 2);
 
             // integration with embedded JSON in Javascript eg. $(this).css({'color': '#343e4a'});
-            $quote = self::strposa(trim($function), array('"', "'"), 1);
+            $char = '';
+            $quote = self::strposa(trim($function), array('"', "'"), 1, null, $char);
 
             if ($quote !== false && substr(str_replace(' ', '', $function), $quote + 1, 1) == ':')
                 return true;
@@ -1534,17 +1535,22 @@ class Parser
      * @param callable $f (Optional) Function that selects best option (Defaults to min)
      * @return bool|mixed
      */
-    public static function strposa($haystack, $needles = array(), $offset = 0, $f = 'min')
+    public static function strposa($haystack, $needles = array(), $offset = 0, $f = 'min', &$char = null)
     {
+        if ($f === null) $f = 'min';
+
         $chr = array();
+        $chrPos = array();
 
         foreach($needles as $needle)
         {
             $res = strpos($haystack, $needle, $offset);
-            if ($res !== false) $chr[$needle] = $res;
+            if ($res !== false) {$chr[$needle] = $res; $chrPos[$res] = $needle;};
         }
 
         if(empty($chr)) return false;
-        return $f($chr);
+        $pos = $f($chr);
+        $char = $chrPos[$pos];
+        return $pos;
     }
 }

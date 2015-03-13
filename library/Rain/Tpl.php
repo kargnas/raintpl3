@@ -35,7 +35,7 @@ class Tpl {
         'tpl_dir' => 'templates/',
         'cache_dir' => 'cache/',
         'tpl_ext' => 'html',
-        'ignore_single_quote' => true,
+        //'ignore_single_quote' => true,
         'predetect' => true,
         'base_url' => '',
         'php_enabled' => false,
