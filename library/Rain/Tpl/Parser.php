@@ -376,7 +376,12 @@ class Parser
             // pass all blocks to this parser
             $passAllBlocksTo = '';
             $this->tagData = array(
-
+                'loop' => array(
+                    'level' => 0,
+                    'count' => 0,
+                    'totalParseTime' => 0,
+                    'profile' => array(),
+                ),
             );
             $tags = static::$tags;
             $templateEnding = '';
@@ -577,44 +582,206 @@ class Parser
         );
     }
 
+    /**
+     * Check if character is between quotes in a string
+     *
+     * @param array $quotePositions List of quotes positions - result of $this->getQuotesPositions()
+     * @param int $start String/character position
+     * @param null|int $end String/character ending position (if 1 byte character then it could be possibly $start = $end)
+     *
+     * @author Damian Kęska <damian@pantheraframework.org>
+     * @return array Exact position of a quote set that is containing our search
+     */
+    public static function isInQuotes($quotePositions, $start, $end = null)
+    {
+        if (!intval($start))
+            return array();
+
+        if ($end === null)
+            $start = $end;
+
+        foreach ($quotePositions as $quotePos)
+        {
+            // quoteStartPosition < $element < quoteEndPosition
+            if ($quotePos[1] <= $start && $end <= $quotePos[2])
+                return $quotePos;
+        }
+
+        return array();
+    }
+
+    /**
+     * @param $html
+     * @param null $loopLevel
+     * @param bool $escape
+     * @param bool $echo
+     * @param bool $updateModifier
+     * @return mixed|string
+     */
     protected function varReplace($html, $loopLevel = NULL, $escape = TRUE, $echo = FALSE, $updateModifier = TRUE)
     {
         // change variable name if loop level
         if (!empty($loopLevel))
             $html = preg_replace(array('/(\$key)\b/', '/(\$value)\b/', '/(\$counter)\b/'), array('${1}' . $loopLevel, '${1}' . $loopLevel, '${1}' . $loopLevel), $html);
 
-        // if it is a variable
-        if (preg_match_all('/(\$[a-z_A-Z][^\s]*)/', $html, $matches)) {
-            // substitute . and [] with [" "]
-            for ($i = 0; $i < count($matches[1]); $i++) {
+        preg_match_all('/\$([a-z_A-Z.0-9]+)/', $html, $variables);
 
-                $rep = preg_replace('/\[(\${0,1}[a-zA-Z_0-9]*)\]/', '["$1"]', $matches[1][$i]);
-                //$rep = preg_replace('/\.(\${0,1}[a-zA-Z_0-9]*)/', '["$1"]', $rep);
-                $rep = preg_replace( '/\.(\${0,1}[a-zA-Z_0-9]*(?![a-zA-Z_0-9]*(\'|\")))/', '["$1"]', $rep );
-                $html = str_replace($matches[0][$i], $rep, $html);
-            }
+        // if no variables found
+        if (!$variables || !$variables[0])
+            return $html;
 
-            // update modifier
-            if ($updateModifier)
+        $pos = 0;
+        $variablePositions = array();
+
+        foreach ($variables[0] as $varName)
+        {
+            $variablePositions[$varName] = array();
+
+            do
             {
-                $html = $this->modifierReplace($html);
-            }
+                $pos = strpos($html, $varName, $pos);
 
-            // if does not initialize a value, e.g. {$a = 1}
-            if (!preg_match('/\$.*=.*/', $html)) {
+                if ($pos !== false)
+                {
+                    $variablePositions[$varName][] = $pos;
+                    $pos++;
+                }
 
-                // escape character
-                if ($this->config['auto_escape'] && $escape)
-                    //$html = "htmlspecialchars( $html )";
-                    $html = "htmlspecialchars( $html, ENT_COMPAT, '" . $this->config['charset'] . "', FALSE )";
+            } while ($pos !== false);
+        }
 
-                // if is an assignment it doesn't add echo
-                if ($echo)
-                    $html = "echo " . $html;
+        $mappedVariablePositions = array();
+
+        foreach ($variablePositions as $varName => $var)
+        {
+            foreach ($var as $varPos)
+            {
+                $mappedVariablePositions[] = array(
+                    'pos' => $varPos,
+                    'varName' => $varName,
+                    'parsed' => '',
+                );
             }
         }
 
+        // all variables
+        foreach ($variablePositions as $varName => $var)
+        {
+            $dotPositions = self::strposAll($varName, '.', 0);
+            $arrayModificatorString = '';
+
+            foreach ($dotPositions as $key => $position)
+            {
+                $endChar = '';
+                if (($key+1) < count($dotPositions))
+                    $endPosition = ($dotPositions[$key + 1] - $position - 1);
+                else
+                    $endPosition = strlen($varName);
+
+                $arrayPart = trim(substr($varName, $position + 1, $endPosition));
+
+                if (!strlen($arrayPart))
+                    continue;
+
+                if (is_numeric($arrayPart))
+                {
+                    $arrayModificatorString .= '[' . (string)intval($arrayPart) . ']';
+                    continue;
+                }
+
+                $arrayModificatorString .= '["' .$arrayPart. '"]' .$endChar;
+            }
+
+            if ($arrayModificatorString)
+            {
+                if (substr($varName, -1) === '.')
+                    $arrayModificatorString .= '.';
+
+                $parsedVariableString = substr($varName, 0, $dotPositions[0]). $arrayModificatorString;
+
+                // update function modifiers
+                if ($updateModifier)
+                    $parsedVariableString = $this->parseModifiers($parsedVariableString, false);
+
+                foreach ($mappedVariablePositions as &$pos)
+                {
+                    if ($pos['varName'] == $varName)
+                        $pos['parsed'] = $parsedVariableString;
+                }
+            }
+        }
+
+        usort($mappedVariablePositions, function ($a, $b) {
+            return ($a['pos'] - $b['pos']);
+        });
+
+        // replace all occurrences
+        $diff = 0; $i=0; $startPosDiff = 0;
+        foreach ($mappedVariablePositions as $position)
+        {
+            if (!$position['parsed'])
+                continue;
+
+            $i++;
+
+            if ($i > 1)
+                $startPosDiff = $diff;
+
+            $html = substr_replace($html, $position['parsed'], ($position['pos'] + $startPosDiff), strlen($position['varName']));
+            $diff += (strlen($position['parsed']) - strlen($position['varName']));
+        }
+
         return $html;
+    }
+
+    /**
+     * Get positions of starting and ending of quotes
+     *
+     * @param string $code
+     * @param array|null $charList (Optional) List of characters eg. ", ', `
+     *
+     * @todo Ignore escaped quotes - \"
+     * @author Damian Kęska <damian.keska@pantheraframework.org>
+     * @return array
+     */
+    public function getQuotesPositions($code, $charList = null)
+    {
+        $pos = 0;
+        $count = 0;
+        $found = array();
+
+        if ($charList === null)
+        {
+            $charList = array(
+                '"', "'",
+            );
+        }
+
+        do
+        {
+            $char = '';
+            $pos = self::strposa($code, $charList, $pos, null, $char);
+
+            if ($pos !== false)
+            {
+                $ending = strpos($code, $char, ($pos + 1));
+
+                if ($ending !== false)
+                {
+                    $found[] = array(
+                        $char,
+                        $pos,
+                        $ending,
+                    );
+
+                    $pos = ($ending + 1);
+                } else
+                    $pos++; // what to do if something is not closed properly?
+            }
+
+        } while ($pos !== false);
+
+        return $found;
     }
 
     /**
@@ -1533,9 +1700,13 @@ class Parser
      * @param array $needles List of needles in array
      * @param int $offset (Optional) Offset we are starting from
      * @param callable $f (Optional) Function that selects best option (Defaults to min)
-     * @return bool|mixed
+     * @param string &$char (Optional) Here could be set a best found result
+     * @param array &$chr (Optional) List of found needles
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return bool|int
      */
-    public static function strposa($haystack, $needles = array(), $offset = 0, $f = 'min', &$char = null)
+    public static function strposa($haystack, $needles = array(), $offset = 0, $f = 'min', &$char = null, &$chr = null)
     {
         if ($f === null) $f = 'min';
 
@@ -1552,5 +1723,34 @@ class Parser
         $pos = $f($chr);
         $char = $chrPos[$pos];
         return $pos;
+    }
+
+    /**
+     * Find all substring occurences in a string
+     *
+     * @param string $haystack Input string
+     * @param string $needle Search string
+     * @param int $offset (Optional) Starting offset
+     *
+     * @author Damian Kęska <damian.keska@fingo.pl>
+     * @return int[]
+     */
+    public static function strposAll($haystack, $needle, $offset = 0)
+    {
+        $positions = array();
+
+        do
+        {
+            $offset = strpos($haystack, $needle, $offset);
+
+            if ($offset !== false)
+            {
+                $positions[] = $offset;
+                $offset++;
+            }
+
+        } while ($offset !== false);
+
+        return $positions;
     }
 }
