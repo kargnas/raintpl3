@@ -24,5 +24,7 @@ class Issue165Test extends PHPUnit_Framework_TestCase
         $tpl = new \Rain\Tpl();
         $this->assertEquals('//cdn.my-project.com/assets/js/jquery.js', $tpl->drawString("{\$requirejs_main='//cdn.my-project.com/assets/js/jquery.js'}{\$requirejs_main}", true));
         $this->assertEquals('//cdn.my-project.com/assets/js/jquery.js', $tpl->drawString('{$requirejs_main="//cdn.my-project.com/assets/js/jquery.js"}{$requirejs_main}', true));
+        $this->assertEquals('http://www.example.com', $tpl->drawString('{$url= \'http://www.example.com\'}{$url}', true));
+        $this->assertEquals('http://www.example.com', $tpl->drawString('{$url=\'http://www.example.com\'}{$url}', true));
     }
 }
