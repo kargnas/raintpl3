@@ -31,5 +31,6 @@ class Issue139Test extends PHPUnit_Framework_TestCase
         $this->assertEquals('4', $tpl->drawString('{function="(1 + count($array))"}', true));
         $this->assertEquals('4', $tpl->drawString('{count($array) + 1}', true));
         $this->assertEquals('4', $tpl->drawString('{count($array)+1}', true));
+        $this->assertEquals('4', $tpl->drawString('{$variable=(count($array)+1)}{$variable}', true));
     }
 }
