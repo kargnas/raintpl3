@@ -656,10 +656,35 @@ class Parser
         {
             foreach ($var as $varPos)
             {
+				$length = strlen($varName);
+				$modifier = '';
+				$modifierPos = null;
+				$modifierEnds = null;
+
+				/**
+				 * Lookup for modifiers
+				 *
+				 * @keywords modifiers
+				 */
+				if ($updateModifier && substr($html, ($varPos + $length), 1) === '|')
+				{
+					$modifierPos = ($varPos + $length + 1);
+					$modifierEnds = self::strposa($html, array(
+						'(', ')',
+					), ($varPos + $length));
+
+					$modifier = substr($html, ($varPos + $length), ($modifierEnds - ($varPos + $length)));
+					$length = strlen($varName.$modifier);
+				}
+
                 $mappedVariablePositions[] = array(
                     'pos' => $varPos,
                     'varName' => $varName,
-                    'parsed' => '',
+                    'parsed' => $varName,
+					'length' => $length, // includes modifier length
+					'modifier' => $modifier,
+					'modifierPos' => $modifierPos,
+					'modifierEnds' => $modifierEnds,
                 );
             }
         }
@@ -692,23 +717,21 @@ class Parser
                 $arrayModificatorString .= '["' .$arrayPart. '"]' .$endChar;
             }
 
-            if ($arrayModificatorString)
-            {
-                if (substr($varName, -1) === '.')
-                    $arrayModificatorString .= '.';
+			// restore a dot at the end of string if there was any but wasnt used as an array operator
+			if (substr($varName, -1) === '.')
+				$arrayModificatorString .= '.';
 
-                $parsedVariableString = substr($varName, 0, $dotPositions[0]). $arrayModificatorString;
+			// if any array modificator was found
+			if ($arrayModificatorString)
+				$parsedVariableString = substr($varName, 0, $dotPositions[0]). $arrayModificatorString;
+			else
+				$parsedVariableString = $varName;
 
-                // update function modifiers
-                if ($updateModifier)
-                    $parsedVariableString = $this->parseModifiers($parsedVariableString, false);
-
-                foreach ($mappedVariablePositions as &$pos)
-                {
-                    if ($pos['varName'] == $varName)
-                        $pos['parsed'] = $parsedVariableString;
-                }
-            }
+			foreach ($mappedVariablePositions as &$pos)
+			{
+				if ($pos['varName'] == $varName)
+					$pos['parsed'] = $parsedVariableString;
+			}
         }
 
         usort($mappedVariablePositions, function ($a, $b) {
@@ -719,7 +742,7 @@ class Parser
         $diff = 0; $i=0; $startPosDiff = 0;
         foreach ($mappedVariablePositions as $position)
         {
-            if (!$position['parsed'])
+            if ((!$position['parsed'] || $position['parsed'] === $position['varName']) && !$updateModifier)
                 continue;
 
             $i++;
@@ -727,8 +750,15 @@ class Parser
             if ($i > 1)
                 $startPosDiff = $diff;
 
-            $html = substr_replace($html, $position['parsed'], ($position['pos'] + $startPosDiff), strlen($position['varName']));
-            $diff += (strlen($position['parsed']) - strlen($position['varName']));
+			$replacement = $position['parsed'];
+
+			if ($updateModifier)
+			{
+				$replacement = $this->parseModifiers($replacement . $position['modifier']);
+			}
+
+            $html = substr_replace($html, $replacement, ($position['pos'] + $startPosDiff), $position['length']);
+            $diff += (strlen($replacement) - strlen($position['varName']));
         }
 
         return $html;
@@ -1283,7 +1313,12 @@ class Parser
     }
 
     /**
-     * {function} instruction, handles also strings and it's modificators
+     * {function} instruction, handles also strings and it's modificators.
+	 *
+	 * Features:
+	 * - Raw function calls eg. {var_dump($a)}
+	 * - Modificators support {test()|trim}
+	 * - Ternary operator {test() ? $a : b}
      *
      * Examples:
      * {function="test()"}
@@ -1300,15 +1335,38 @@ class Parser
      */
     protected function functionBlockParser(&$tagData, &$part, &$tag)
     {
-        $isDirectFunction = is_callable(substr($part, 1, strpos($part, '(') - 1));
-        $isString = in_array(substr($part, 1, 1), array("'", '"'));
+		$isString = in_array(substr($part, 1, 1), array("'", '"'));
+
+		// Exception: isset is a part of PHP syntax, so it's not detected as callable
+		$isDirectFunction = substr($part, 1, strpos($part, '(') - 1);
+        $isDirectFunction = (is_callable($isDirectFunction) || $isDirectFunction === 'isset');
 
         if (substr(strtolower($part), 0, 9) !== '{function' && !$isDirectFunction && !$isString)
             return false;
 
+		$ternary = '';
+
         if ($isDirectFunction || $isString)
         {
+			// {function()}
             $function = substr($part, 1, strlen($part) - 2);
+
+			$ternaryStarts = self::strposa($function, array(
+				'?"', '? "', "?'", "? '",
+			));
+
+			/**
+			 * Ternary operator support for functions
+			 *
+			 * Example:
+			 * {test() ? $a : $b}
+			 */
+			if ($ternaryStarts !== false)
+			{
+				$body = $function;
+				$function = substr($function, 0, $ternaryStarts);
+				$ternary = substr($body, $ternaryStarts);
+			}
 
             // integration with embedded JSON in Javascript eg. $(this).css({'color': '#343e4a'});
             $char = '';
@@ -1318,6 +1376,7 @@ class Parser
                 return true;
 
         } else {
+			// {function="..."}
             $count = 2;
 
             if (substr($part, -2) !== '"}' && substr($part, -2) !== "'}")
@@ -1331,7 +1390,7 @@ class Parser
         $this->blackList(substr($function, 0, strpos(str_replace(' ', '', $function), '(')));
 
         // function
-        $part = "<?php echo ".$this->parseModifiers($function). ";?>";
+        $part = "<?php echo ".$this->varReplace($function, null, false, false, true). $ternary . ";?>";
     }
 
     /**
