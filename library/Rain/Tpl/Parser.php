@@ -498,7 +498,7 @@ class Parser
                     }
                 }
 
-                if ($found === false && !$this->config['ignore_unknown_tags'])
+                if ($found === false && (!isset($this->config['ignore_unknown_tags']) || !$this->config['ignore_unknown_tags']))
                 {
                     $pos = $this->findLine($index, $blockPositions, $code);
                     $e = new SyntaxException('Error! Unknown tag "' .$part. '", loaded by ' .$templateFilepath. ' at line ' .$pos['line']. ', offset ' .$pos['offset'], 1, null, $pos['line'], $templateFilepath);
@@ -1582,7 +1582,7 @@ class Parser
             $value = "\$value".$valuesPrefix;
 
         // result code passed by reference
-        $part = "<?php $counter=-1; $assignNewVar if(isset($newvar)&&(is_array($newvar)||$newvar instanceof Traversable)&& sizeof($newvar))foreach($newvar as ".$key." => ".$value."){ $counter++; ?>";
+        $part = "<?php $counter=-1; if(isset($newvar)&&(is_array($newvar)||$newvar instanceof Traversable)&& sizeof($newvar))foreach($newvar as ".$key." => ".$value."){ $counter++; ?>";
     }
 
     /**
