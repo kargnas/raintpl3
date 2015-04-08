@@ -46,6 +46,8 @@ class Tpl {
         'sandbox' => true,
         'remove_comments' => false,
         'registered_tags' => array(),
+
+        'ignore_unknown_tags' => false,
     );
 
     // tags registered by the developers

@@ -48,8 +48,8 @@ class Parser
     protected static $tags = array(
         // @TODO: {block}
         // @TODO: {foreach type="array"} Strict type setting to minimize output code
-        // @TODO: Ternary operator (short if)
         // @TODO: {autoescape} for escaping HTML code inside
+        // @TODO: Ternary operator on variables
 
         'variable' => true, // {$} RainTPL3.1
         'if' => true, // {if}, {elseif} RainTPL3.1
@@ -61,9 +61,7 @@ class Parser
         'include' => true, // RainTPL3.1
         'capture' => true, // RainTPL3.1
         'block' => true, // {block} RainTPL3.1
-        'autoescape' => true,
         'noparse' => true, // {noparse}, {literal} RainTPL3.1
-        'ternary' => true,
         'comment' => true, // {*}, {ignore} RainTPL3.1
         'constant' => true, // {#CONSTANT_NAME#} RainTPL3.1
         'mark' => true, // {mark a} {goto a} RainTPL3.1
@@ -673,6 +671,9 @@ class Parser
 						'(', ')',
 					), ($varPos + $length));
 
+                    if ($modifierEnds === false)
+                        $modifierEnds = strlen($html);
+
 					$modifier = substr($html, ($varPos + $length), ($modifierEnds - ($varPos + $length)));
 					$length = strlen($varName.$modifier);
 				}
@@ -869,7 +870,7 @@ class Parser
             $tagBody = substr($tagBody, 1, (strlen($tagBody) - 2));
 
         // this not includes a value with spaces inside as we will be passing mostly variables here
-        $args = explode(' ', $tagBody);
+        $args = $this->joinStrings(explode(' ', $tagBody), ' ');
 
         $argsAssoc = array();
 
@@ -880,7 +881,7 @@ class Parser
             if ($equalsPos === false)
                 continue;
 
-            $value = trim(substr($arg, ($equalsPos + 2), strlen($arg)));
+            $value = substr($arg, ($equalsPos + 2), strlen($arg));
             $argsAssoc[trim(substr($arg, 0, $equalsPos))] = substr($value, 0, (strlen($value) - 1));
         }
 
@@ -977,9 +978,20 @@ class Parser
      */
     protected function captureBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart)
     {
-        $ending = $this->parseTagEnding($part, 'capture');
+        $char = '';
+        $ending = $this->parseTagEnding($lowerPart, array(
+            'capture',
+            'print',
+            'autoescape',
+        ));
 
-        if (substr($lowerPart, 0, 8) !== '{capture' && !$ending)
+        $tagRealName = self::strposa($lowerPart, array(
+            '{capture',
+            '{print',
+            '{autoescape',
+        ), 0, 'min', $char);
+
+        if ($tagRealName === false && !$ending)
             return false;
 
         /**
@@ -993,16 +1005,121 @@ class Parser
                 throw new SyntaxException('{capture} tag closed before it was opened, in "' .$templateFilePath. '" on line ' .$context['line']. ', offset ' .$context['offset'], 5, null, $context['line'], $templateFilePath);
             }
 
+            $body = 'ob_get_clean()';
+
+            /**
+             * Support for filter argument and it's arguments
+             *
+             * Examples:
+             * {capture name="test" filter="str_replace" arg1="replacement-string"}...{/capture}
+             * {capture name="test" filter="trim"}
+             */
+            if (isset($tagData['filters']))
+            {
+                $filtersCount = count($tagData['filters']);
+                $filterStartingBody = '';
+                $filterEndingBody = '';
+
+                foreach (array_reverse($tagData['filters']) as $filter)
+                {
+                    $filterStartingBody .= $filter['value'] . '(';
+                }
+
+                foreach ($tagData['filters'] as $filter)
+                {
+                    foreach ($filter['arguments'] as $argument)
+                    {
+                        $filterEndingBody .= ',"' .$argument. '"';
+                    }
+
+                    $filterEndingBody .= ')';
+                }
+
+                $body = $filterStartingBody . $body . $filterEndingBody;
+            }
+
+            // allow automaticaly printing block right after running filters and assigning to a variable
+            if (isset($tagData['print']) && $tagData['print'])
+                $body .= ';echo $' .$tagData['assign'];
+
             $tagData['level']--;
-            $part = '<?php $' .$tagData['assign'] . $tagData['operator']. 'ob_get_clean();?>';
+            $part = '<?php $' .$tagData['assign'] . $tagData['operator']. $body. ';?>';
 
             // clean up
             unset($tagData['assign']); unset($tagData['operator']);
+            if (isset($tagData['filters'])) unset($tagData['filters']);
+            if (isset($tagData['operator'])) unset($tagData['operator']);
+            if (isset($tagData['print'])) unset($tagData['print']);
             return true;
         }
 
         $arguments = $this->parseTagArguments($part);
         $tagData['operator'] = '=';
+
+        /**
+         * Filtering mode support - previously known as {autoescape}
+         */
+        $filters = array();
+
+        if ($arguments)
+        {
+            foreach ($arguments as $argumentName => $value)
+            {
+                $argumentName = strtolower($argumentName);
+
+                if (strpos($argumentName, 'filter') === 0)
+                {
+                    $argNamePos = self::strposa($argumentName, array('arg', 'argument'));
+
+                    /**
+                     * Save filter's arguments
+                     */
+                    if ($argNamePos !== false)
+                    {
+                        $tmpFilterName = substr($argumentName, 0, $argNamePos);
+
+                        if (!isset($filters[$tmpFilterName]))
+                            $filters[$tmpFilterName] = array();
+
+                        $filters[$tmpFilterName][$argumentName] = $value;
+
+                    } else {
+                        /**
+                         * Save filters list
+                         */
+                        $tagData['filters'][$argumentName] = array(
+                            'value' => $value,
+                            'arguments' => array(),
+                        );
+                    }
+                }
+            }
+
+            if (isset($tagData['filters']) && $tagData['filters'])
+            {
+                foreach ($filters as $filterName => $value)
+                {
+                    $tagData['filters'][$filterName]['arguments'] = $value;
+                }
+            }
+        }
+
+        /**
+         * For {print} and {autoescape} tags it's not necessary to specify an assign/name/append argument
+         */
+        if ((!isset($arguments['assign']) && !isset($arguments['append']) && !isset($arguments['name'])) && ($char === '{print' || $char === '{autoescape'))
+        {
+            $arguments['assign'] = 'capture' .($tagData['level'] + 1);
+            $arguments['print'] = 1;
+        }
+
+        /**
+         * Directly print block text
+         */
+        if (isset($arguments['print']) && (strtolower($arguments['print']) == 'true' || intval($arguments['print'])))
+        {
+            $tagData['print'] = true;
+        }
 
         /**
          * Look for name, assign or append tag
@@ -1384,6 +1501,10 @@ class Parser
 
             // get function
             $function = str_replace(')"|', ')|', substr($part, 11, ((strlen($part) - 11) - $count)));
+
+            // create function from string - eg. {function="time"} => {function="time()"}
+            if (strpos($function, '(') === false)
+                $function .= '()';
         }
 
         // check black list
@@ -1536,7 +1657,7 @@ class Parser
             $var = $arguments['loop'];
 
         if (!$var)
-            throw new SyntaxException("Syntax error in foreach/loop, there is no array given to iterate on. Code: ".$part);
+            throw new SyntaxException("Syntax error in foreach/loop, there is no array given to iterate on. Code: " . $part, 6, null);
 
         // prefix, example: $value1, $value2 etc. by default should be just $value
         $valuesPrefix = intval($tagData['level']);
@@ -1545,7 +1666,7 @@ class Parser
         $this->blackList($var);
 
         // replace array modificators eg. $array.test to $array["test"]
-        $newvar = $this->varReplace($var, ($valuesPrefix - 1), false, false, false);
+        $newvar = $this->varReplace($var, ($valuesPrefix - 1), false, false, true);
 
         // loop variables
         $counter = "\$counter".$valuesPrefix;
@@ -1558,18 +1679,29 @@ class Parser
             if ($asSyntax !== false)
             {
                 // the key is between "as $" and "=>"
-                $keyEnds = strpos($part, '=>', $asSyntax);
-                $arguments['key'] = trim(substr($part, ($asSyntax + 4), ($keyEnds - $asSyntax) - 4));
+                $keyEnds = self::strposa($part, array(
+                    '=>',
+                    ' ',
+                ), $asSyntax);
 
-                // between: $ and [space] or } (tag ending or arguments separator)
-                $valueStarts = strpos($part, '$', $keyEnds);
-                $valueEnds = self::strposa($part, array(' ', '}'), $valueStarts);
-                $arguments['value'] = substr($part, ($valueStarts + 1), ($valueEnds - $valueStarts) - 1);
+                if ($keyEnds !== false)
+                {
+                    $arguments['key'] = trim(substr($part, ($asSyntax + 4), ($keyEnds - $asSyntax) - 4));
+
+                    // between: $ and [space] or } (tag ending or arguments separator)
+                    $valueStarts = strpos($part, '$', $keyEnds);
+
+                    if ($valueStarts !== false)
+                    {
+                        $valueEnds = self::strposa($part, array(' ', '}'), $valueStarts);
+                        $arguments['value'] = substr($part, ($valueStarts + 1), ($valueEnds - $valueStarts) - 1);
+                    }
+                }
             }
         }
 
         // key
-        if (isset($arguments['key']))
+        if (isset($arguments['key']) && $arguments['key'])
             $key = "\$".$arguments['key'];
         else
             $key = "\$key".$valuesPrefix;
@@ -1582,7 +1714,7 @@ class Parser
             $value = "\$value".$valuesPrefix;
 
         // result code passed by reference
-        $part = "<?php $counter=-1; if(isset($newvar)&&(is_array($newvar)||$newvar instanceof Traversable)&& sizeof($newvar))foreach($newvar as ".$key." => ".$value."){ $counter++; ?>";
+        $part = "<?php $counter=-1; \$newVar=".$newvar."; if(isset(\$newVar)&&(is_array(\$newVar)||\$newVar instanceof Traversable)&& sizeof(\$newVar))foreach(\$newVar as ".$key." => ".$value."){ $counter++; ?>";
     }
 
     /**
@@ -1635,9 +1767,57 @@ class Parser
         }
     }
 
-    protected function conReplace($html) {
-        $html = $this->modifierReplace($html);
-        return $html;
+    /**
+     * Fix array after using explode, connect broken strings syntax
+     *
+     * @param array $array Input array
+     * @param string $delimiter Delimiter string
+     * @author Damian Kęska <damian@pantheraframework.org>
+     * @return array
+     */
+    public function joinStrings(array $array, $delimiter = ' ')
+    {
+        /*$stringSyntax = array(
+            '"' => 0,
+            "'" => 0,
+            //'`' => 0,
+        );*/
+
+        $openPos = 0;
+        $open = false;
+        $newArray = array();
+
+        foreach ($array as $key => $value)
+        {
+            $index = $key;
+            //var_dump($value . ' = ' .count(self::strposAll($value, '"')));
+
+            $matches = count(self::strposAll($value, '"'), COUNT_RECURSIVE);
+
+            // (no string syntax || is string syntax && not in pair) && we are not iterating first element in array
+            if ($key > 0 && $open)
+            {
+                $index = $openPos;
+            }
+
+            if ($matches && $matches % 2)
+            {
+                $open = !$open;
+
+                // on $openPos there is stored beginging position of string syntax
+                if ($open)
+                {
+                    $openPos = $key;
+                }
+            }
+
+            if (isset($newArray[$index]))
+                $newArray[$index] .= $delimiter . $value;
+            else
+                $newArray[$index] = $value;
+        }
+
+        return $newArray;
     }
 
     protected function modifierReplace($html)
