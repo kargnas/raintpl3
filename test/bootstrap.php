@@ -11,3 +11,19 @@
 
     // require Rain autoload
     require_once "Rain/autoload.php";
+
+    class RainTPLTestCase extends PHPUnit_Framework_TestCase
+    {
+        public $engine = null;
+
+        public function setup()
+        {
+            Rain\Tpl::configure(array(
+                'debug' => true,
+                'tpl_dir' => '/tmp/',
+                'cache_dir' => '/tmp/',
+            ));
+
+            $this->engine = new \Rain\Tpl();
+        }
+    }
