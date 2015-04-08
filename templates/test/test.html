@@ -85,7 +85,14 @@
         <h2>Escape variable</h2>
         {$bad_variable}
         {autoescape="off"}{$safe_variable}{/autoescape}
-        
 
+
+    {capture print="true" name="test" filter3="stripslashes" filter="trim" filterArg=" asd" filter2="rtrim" filter2Arg=" "}test <b>aaa</b>, {/capture}there shouldnt be a space before this text
+
+    <h2>This is a {noparse}{print}{/noparse} tag test</h2>
+    {print filter="nl2br"}This is a print test
+    <b>This line was automaticaly breaked using nl2br() from PHP Core Library</b>
+    Also in a headline there is a test for {noparse}{noparse}{/noparse} tag.
+    {/print}
 </body>
 </html>
