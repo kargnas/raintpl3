@@ -1164,7 +1164,6 @@ class Parser
      *
      * @return bool
      */
-
     protected function blockBlockParser(&$tagData, &$part, &$tag, $templateFilePath, $blockIndex, $blockPositions, $code, &$passAllBlocksTo, $lowerPart, &$codeSplit)
     {
         $ending = $this->parseTagEnding($lowerPart, 'block');
@@ -1510,8 +1509,14 @@ class Parser
         // check black list
         $this->blackList(substr($function, 0, strpos(str_replace(' ', '', $function), '(')));
 
+        // for {"string"|test} syntax there is simpler way
+        if ($isString)
+            $body = $this->parseModifiers($function);
+        else
+            $body = $this->varReplace($function, null, false, false, true);
+
         // function
-        $part = "<?php echo ".$this->varReplace($function, null, false, false, true). $ternary . ";?>";
+        $part = "<?php echo ".$body. $ternary . ";?>";
     }
 
     /**
