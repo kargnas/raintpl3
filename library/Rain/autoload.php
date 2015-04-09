@@ -11,7 +11,7 @@ spl_autoload_register( "RainTplAutoloader" );
 function RainTplAutoloader( $class ){
 
     // it only autoload class into the Rain scope
-    if (strpos($class,'Rain\\Tpl') !== false){
+    if (strpos($class,'Rain\\') !== false){
 
         // transform the namespace in path
         $path = str_replace("\\", DIRECTORY_SEPARATOR, $class );

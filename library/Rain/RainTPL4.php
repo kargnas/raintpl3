@@ -1,33 +1,34 @@
 <?php
-
 namespace Rain;
 use Rain\Tpl\NotFoundException;
 
 /**
- *  RainTPL
- *  --------
- *  Realized by Federico Ulfo & maintained by the Rain Team
- *  Distributed under GNU/LGPL 3 License
+ * RainTPL4 engine main class
  *
- *  @version 3.0 Alpha milestone: https://github.com/rainphp/raintpl3/issues/milestones?with_issues=no
+ * @package Rain\TemplateEngine
+ * @version 4.0
+ * @author Damian Kęska <damian@pantheraframework.org>
  */
-class Tpl {
+class RainTPL4
+{
+    /**
+     * List of all assigned variables
+     *
+     * @var array
+     */
+    public $variables = array(
 
-    // variables
-    public $var = array();
-
-    protected $config = array(),
-              $objectConf = array();
+    );
 
     /**
-     * Plugin container
+     * Configuration as associative array
      *
-     * @var \Rain\Tpl\PluginContainer
+     * @var array
      */
-    protected static $plugins = null;
+    public $config = array(
+        // backwards compatibility
+        'raintpl3_plugins_compatibility' => true,
 
-    // configuration
-    protected static $conf = array(
         'checksum' => array(),
         'charset' => 'UTF-8',
         'debug' => false,
@@ -46,47 +47,50 @@ class Tpl {
         'sandbox' => true,
         'remove_comments' => false,
         'registered_tags' => array(),
-
         'ignore_unknown_tags' => false,
     );
 
-    // tags registered by the developers
-    protected static $registered_tags = array();
-
-    // here should be all blocks defined in code
-    protected $definedBlocks = array(
+    /**
+     * Registered plugins for RainTPL3 and RainTPL4
+     *
+     * @var array
+     */
+    public $plugins = array(
 
     );
 
+    /**
+     * Externally registered tags eg. by plugins
+     *
+     * @var array
+     */
+    public $registeredTags = array(
+
+    );
 
     /**
      * Draw the template
      *
      * @param string $templateFilePath name of the template file
      * @param bool $toString if the method should return a string
-     * @param bool $isString if input is a string, not a file path
-     * or echo the output
+     * @param bool $isString if input is a string, not a file path or echo the output
      *
-     * @return void, string: depending of the $toString
+     * @return void|string depending of the $toString
      */
     public function draw($templateFilePath, $toString = FALSE, $isString = FALSE)
     {
-        extract($this->var);
-        
-        // Merge local and static configurations
-        $this->config = array_merge(static::$conf, $this->objectConf);
-        
+        extract($this->variables);
         ob_start();
-        
+
         // parsing a string (moved from drawString method)
         if ($isString)
             require $this->checkString($templateFilePath);
         else // parsing a template file
             require $this->checkTemplate($templateFilePath);
-        
+
         $html = ob_get_clean();
 
-        if (isset($this->config['raintpl3_plugins_compatibility']) && $this->config['raintpl3_plugins_compatibility'])
+        if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
         {
             // Execute plugins, before_parse
             $context = $this->getPlugins()->createContext(array(
@@ -105,68 +109,16 @@ class Tpl {
     }
 
     /**
-     * Draw a string
+     * Evaluate a template string
      *
-     * @param string $string string in RainTpl format
-     * @param bool $toString if the param
+     * @param string $string Input template as string
+     * @param bool $toString Return as string instead of printing?
      *
-     * @return void, string: depending of the $toString
+     * @return void|string Compiled string (if $toString is set to True)
      */
     public function drawString($string, $toString = false)
     {
         return $this->draw($string, $toString, True);
-    }
-    
-    /**
-     * Object specific configuration
-     *
-     * @param string|array $setting name of the setting to configure
-     * or associative array type 'setting' => 'value'
-     * @param mixed $value: value of the setting to configure
-     * @return \Rain\Tpl $this
-     */
-    public function objectConfigure($setting, $value = null)
-    {
-        if (is_array($setting))
-        {
-            // use this function recursive to set multiple configuration values from array
-            foreach ($setting as $key => $value)
-            {
-                $this->objectConfigure($key, $value);
-            }
-        } else if (isset(static::$conf[$setting]))
-            $this->objectConf[$setting] = $value;
-            
-        return $this;
-    }
-
-    /**
-     * Configure the template
-     *
-     * @param string|array $setting: name of the setting to configure
-     * or associative array type 'setting' => 'value'
-     * @param mixed $value: value of the setting to configure
-     */
-    public static function configure($setting, $value = null)
-    {
-        if (is_array($setting))
-        {
-            // use this function recursive to set multiple configuration values from array
-            foreach ($setting as $key => $value)
-            {
-                static::configure($key, $value);
-            }
-        } else if (isset(static::$conf[$setting])) {
-            static::$conf[$setting] = $value;
-            
-            // the checksum must match template with any bool value or it wont work as the template file names will be diffirent
-            if ($setting == 'allow_compile' or $setting == 'allow_compile_once')
-            {
-                $value = True;
-            }
-            
-            static::$conf['checksum'][$setting] = $value; // take trace of all config
-        }
     }
 
     /**
@@ -181,49 +133,67 @@ class Tpl {
     public function assign($variable, $value = null)
     {
         if (is_array($variable))
-            $this->var = $variable + $this->var;
+            $this->variables = $variable + $this->variables;
         else
-            $this->var[$variable] = $value;
+            $this->variables[$variable] = $value;
 
         return $this;
     }
 
     /**
-     * Clean the expired files from cache
-     * @param type $expireTime Set the expiration time
+     * Clean the expired files from
+     *
+     * @param int $expireTime Expiration time
+     * @return string[] List of removed files
      */
-    public static function clean($expireTime = 2592000)
+    public function clean($expireTime = 2592000)
     {
-        $files = glob(static::$conf['cache_dir'] . "*.rtpl.php");
+        $files = glob($this->getConfigurationKey('cache_dir') . "*.rtpl.php");
         $time = time() - $expireTime;
+        $removed = array();
+
         foreach ($files as $file)
         {
             if ($time > filemtime($file))
+            {
+                $removed[] = $file;
                 unlink($file);
+            }
         }
+
+        return $removed;
     }
 
     /**
-     * Allows the developer to register a tag.
+     * Allows the developer to register a regular expression parsed tag
      *
-     * @param string $tag nombre del tag
-     * @param regexp $parse regular expression to parse the tag
-     * @param anonymous function $function: action to do when the tag is parsed
+     * @param string $tag Tag name
+     * @param string $parse Regular expression to parse the tag
+     * @param callable $function Function to call to parse a tag
+     *
+     * @return array
      */
-    public static function registerTag($tag, $parse, $function) {
-        static::$registered_tags[$tag] = array("parse" => $parse, "function" => $function);
+    public function & registerTag($tag, $parse, $function)
+    {
+        $this->registeredTags[$tag] = array(
+            'parse' => $parse,
+            'function' => $function,
+        );
+
+        return $this->registeredTags;
     }
 
     /**
      * Registers a plugin globally.
      *
+     * @deprecated
      * @param \Rain\Tpl\IPlugin $plugin
      * @param string $name name can be used to distinguish plugins of same class.
      */
-    public static function registerPlugin(Tpl\IPlugin $plugin, $name = '') {
+    public function registerPlugin(Tpl\IPlugin $plugin, $name = '')
+    {
         $name = (string)$name ?: \get_class($plugin);
-
-        static::getPlugins()->addPlugin($name, $plugin);
+        $this->getPlugins()->addPlugin($name, $plugin);
     }
 
     /**
@@ -231,9 +201,9 @@ class Tpl {
      *
      * @param string $name
      */
-    public static function removePlugin($name)
+    public function removePlugin($name)
     {
-        static::getPlugins()->removePlugin($name);
+        $this->getPlugins()->removePlugin($name);
     }
 
     /**
@@ -241,10 +211,10 @@ class Tpl {
      *
      * @return \Rain\Tpl\PluginContainer
      */
-    protected static function getPlugins()
+    protected function getPlugins()
     {
-        return static::$plugins
-            ?: static::$plugins = new Tpl\PluginContainer();
+        return $this->plugins
+            ?: $this->plugins = new Tpl\PluginContainer();
     }
 
     /**
@@ -311,12 +281,12 @@ class Tpl {
         $originalTemplate = $template;
         $extension = '';
 
-        $path = self::resolveTemplatePath($template, $this->config['tpl_dir'], $parentTemplateFilePath, $this->config['tpl_ext']);
+        $path = self::resolveTemplatePath($template, $this->getConfigurationKey('tpl_dir'), $parentTemplateFilePath, $this->getConfigurationKey('tpl_ext'));
 
         // normalize path
         $path = str_replace(array('//', '//'), '/', $path);
 
-        $parsedTemplateFilepath = $this->config['cache_dir'] . basename($originalTemplate) . "." . md5(dirname($path) . serialize($this->config['checksum']) . $originalTemplate) . '.rtpl.php';
+        $parsedTemplateFilepath = $this->getConfigurationKey('cache_dir') . basename($originalTemplate) . "." . md5(dirname($path) . serialize($this->getConfigurationKey('checksum')) . $originalTemplate) . '.rtpl.php';
 
         // if the template doesn't exsist throw an error
         if (!$path)
@@ -341,9 +311,9 @@ class Tpl {
             if (!is_file($parsedTemplateFilepath))
             {
                 // allow first compilation of file
-                if (!$this->config['allow_compile_once'])
+                if (!$this->getConfigurationKey('allow_compile_once'))
                     throw new NotFoundException('Template cache file "' .$parsedTemplateFilepath. '" is missing and "allow_compile", "allow_compile_once" are disabled in configuration');
-                    
+
             } else
                 return $parsedTemplateFilepath;
         }
@@ -351,9 +321,9 @@ class Tpl {
         /**
          * Run the parser if file was not updated since last compilation time
          */
-        if ( $this->config['debug'] or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($path)))
+        if ($this->getConfigurationKey('debug') or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($path)))
         {
-            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+            $parser = new Tpl\Parser($this->config, $this->config, $this->config, $this->plugins, $this->registeredTags);
             $parser->compileFile($path, $parsedTemplateFilepath);
         }
 
@@ -373,26 +343,30 @@ class Tpl {
         $parsedTemplateFilepath = $this->config['cache_dir'] . $templateName . '.s.rtpl.php';
 
         // Compile the template if the original has been updated
-        if ($this->config['debug'] || !file_exists($parsedTemplateFilepath))
+        if ($this->getConfigurationKey('debug') || !file_exists($parsedTemplateFilepath))
         {
-            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+            $parser = new Tpl\Parser($this->config, $this->config, $this->config, $this->plugins, $this->registeredTags);
             $parser->compileString($templateName, $parsedTemplateFilepath, $string);
         }
 
         return $parsedTemplateFilepath;
     }
 
-    private static function addTrailingSlash($folder) {
-
-        if (is_array($folder)) {
-            foreach($folder as &$f) {
-                $f = self::addTrailingSlash($f);
-            }
-        } elseif ( strlen($folder) > 0 && $folder[0] != '/' ) {
-            $folder = $folder . "/";
+    /**
+     * Get configuration value by key name
+     *
+     * @param string $key Configuration key name
+     *
+     * @author Damian Kęska <damian@pantheraframework.org>
+     * @return mixed|null
+     */
+    public function getConfigurationKey($key)
+    {
+        if (isset($this->config[$key]))
+        {
+            return $key;
         }
-        return $folder;
 
+        return null;
     }
-
 }

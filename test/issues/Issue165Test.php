@@ -5,7 +5,7 @@
  * @link https://github.com/rainphp/raintpl3/issues/165
  * @author Damian Kęska <damian@pantheraframework.org>
  */
-class Issue165Test extends PHPUnit_Framework_TestCase
+class Issue165Test extends RainTPLTestCase
 {
     /**
      * Test case for issue #165
@@ -15,16 +15,10 @@ class Issue165Test extends PHPUnit_Framework_TestCase
      */
     public function testIssue165()
     {
-        Rain\Tpl::configure(array(
-            'debug' => true,
-            'tpl_dir' => '/tmp/',
-            'cache_dir' => '/tmp/',
-        ));
-
-        $tpl = new \Rain\Tpl();
-        $this->assertEquals('//cdn.my-project.com/assets/js/jquery.js', $tpl->drawString("{\$requirejs_main='//cdn.my-project.com/assets/js/jquery.js'}{\$requirejs_main}", true));
-        $this->assertEquals('//cdn.my-project.com/assets/js/jquery.js', $tpl->drawString('{$requirejs_main="//cdn.my-project.com/assets/js/jquery.js"}{$requirejs_main}', true));
-        $this->assertEquals('http://www.example.com', $tpl->drawString('{$url= \'http://www.example.com\'}{$url}', true));
-        $this->assertEquals('http://www.example.com', $tpl->drawString('{$url=\'http://www.example.com\'}{$url}', true));
+        $this->setupRainTPL4();
+        $this->assertEquals('//cdn.my-project.com/assets/js/jquery.js', $this->engine->drawString("{\$requirejs_main='//cdn.my-project.com/assets/js/jquery.js'}{\$requirejs_main}", true));
+        $this->assertEquals('//cdn.my-project.com/assets/js/jquery.js', $this->engine->drawString('{$requirejs_main="//cdn.my-project.com/assets/js/jquery.js"}{$requirejs_main}', true));
+        $this->assertEquals('http://www.example.com', $this->engine->drawString('{$url= \'http://www.example.com\'}{$url}', true));
+        $this->assertEquals('http://www.example.com', $this->engine->drawString('{$url=\'http://www.example.com\'}{$url}', true));
     }
 }

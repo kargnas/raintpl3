@@ -26,4 +26,14 @@
 
             $this->engine = new \Rain\Tpl();
         }
+
+        public function setupRainTPL4()
+        {
+            $this->engine = new \Rain\RainTPL4;
+            $this->engine->config = array(
+                'debug' => true,
+                'tpl_dir' => '/tmp/',
+                'cache_dir' => '/tmp/',
+            ) + $this->engine->config;
+        }
     }

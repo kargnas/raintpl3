@@ -6,7 +6,6 @@
  */
 class CaptureTest extends RainTPLTestCase
 {
-
     /**
      * Base test
      *
@@ -14,7 +13,7 @@ class CaptureTest extends RainTPLTestCase
      */
     public function testBaseCaptureBlock()
     {
-        $this->setup();
+        $this->setupRainTPL4();
         $this->assertEquals('This is a capture tag test', $this->engine->drawString("{capture name=\"test\"}This is a capture tag test{/capture}{\$test}", true));
     }
 
@@ -25,7 +24,7 @@ class CaptureTest extends RainTPLTestCase
      */
     public function testBaseCaptureBlockWithPrint()
     {
-        $this->setup();
+        $this->setupRainTPL4();
         $this->assertEquals('This is a capture tag test', $this->engine->drawString("{capture name=\"test\" print=\"true\"}This is a capture tag test{/capture}", true));
     }
 
@@ -36,7 +35,7 @@ class CaptureTest extends RainTPLTestCase
      */
     public function testCaptureBlockWithTrimFilter()
     {
-        $this->setup();
+        $this->setupRainTPL4();
         $this->assertEquals('This is a capture tag test', $this->engine->drawString("{capture name=\"test\" print=\"true\" filter=\"trim\"} This is a capture tag test {/capture}", true));
     }
 
@@ -47,7 +46,7 @@ class CaptureTest extends RainTPLTestCase
      */
     public function testCaptureBlockWithSubstrFilterAndArguments()
     {
-        $this->setup();
+        $this->setupRainTPL4();
         $this->assertEquals(' This is', $this->engine->drawString("{capture name=\"test\" print=\"true\" filter=\"substr\" filterArg1=\"0\" filterArg2=\"8\"} This is a capture tag test {/capture}", true));
     }
 }
