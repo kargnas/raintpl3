@@ -14,6 +14,9 @@
 
     class RainTPLTestCase extends PHPUnit_Framework_TestCase
     {
+        /**
+         * @var RainTPL4|null
+         */
         public $engine = null;
 
         public function setup()

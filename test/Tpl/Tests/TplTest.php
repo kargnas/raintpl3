@@ -1,12 +1,12 @@
 <?php
-
+/*
 class TplTest extends PHPUnit_Framework_TestCase
 {
 	private $engine = null;
-
+*/
 	/**
 	 * Sets include path to raintpl lib.
-	 */
+	 *//*
 	public function setup()
 	{
 		$this->configure();
@@ -54,4 +54,4 @@ class TplTest extends PHPUnit_Framework_TestCase
 		Rain\Tpl::registerPlugin($plugin);
 		$this->engine->draw('template', true);
 	}
-}
+}*/

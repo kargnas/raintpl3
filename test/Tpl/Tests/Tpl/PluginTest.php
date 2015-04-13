@@ -1,4 +1,5 @@
 <?php
+/*
 require_once __DIR__ . '/../TplTest.php';
 
 class PluginTest extends PHPUnit_Framework_TestCase
@@ -37,3 +38,4 @@ class PluginTestPlugin extends Rain\Tpl\Plugin
 	public function set_hooks($hooks) {$this->hooks = $hooks;}
 	public function set_param($param) {$this->param = $param;}
 }
+*/

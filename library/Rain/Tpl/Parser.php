@@ -1,24 +1,29 @@
 <?php
 namespace Rain\Tpl;
 use Rain\Tpl;
+use Rain;
 
 /**
  *  RainTPL
  *  --------
  *  Realized by Federico Ulfo & maintained by the Rain Team
+ *  Rewritten by Damian Kęska
  *  Distributed under GNU/LGPL 3 License
  *
+ *  @package Rain\Parser
  *  @version 3.1 beta
  */
 class Parser
 {
+    use RainTPLConfiguration;
+    use RainTPLEventsHandler;
+
     // variables
     public $var = array();
 
-    protected $templateInfo = array(),
-              $objectConf = array();
+    protected $templateInfo = array();
 
-    protected $config = array(
+    public $config = array(
         //'ignore_single_quote' => true,
     );
 
@@ -31,18 +36,8 @@ class Parser
 
     );
 
-    /**
-     * Plugin container
-     *
-     * @var \Rain\Tpl\PluginContainer
-     */
-    protected static $plugins = null;
-
-    // configuration
-    protected static $conf = array();
-
     // tags registered by the developers
-    protected static $registered_tags = array();
+    public $registeredTags = array();
 
     // tags natively supported
     protected static $tags = array(
@@ -83,7 +78,7 @@ class Parser
      *
      * @var array
      */
-    protected static $black_list = array(
+    protected $blackList = array(
         'exec', 'shell_exec', 'pcntl_exec', 'passthru', 'proc_open', 'system',
         'posix_kill', 'posix_setsid', 'pcntl_fork', 'posix_uname', 'php_uname',
         'phpinfo', 'popen', 'file_get_contents', 'file_put_contents', 'rmdir',
@@ -101,29 +96,27 @@ class Parser
         'syslog', 'xmlrpc_entity_decode'
     );
 
-    public function __construct($config, $objectConf, $conf, $plugins, $registered_tags)
-    {
-        $this->config = $config;
-        static::$plugins = $plugins;
-        static::$registered_tags = $registered_tags;
-    }
-
     /**
-     * Returns plugin container.
+     * Constructor
      *
-     * @return \Rain\Tpl\PluginContainer
+     * @param RainTPL4|string|null $tplInstance Pass RainTPL4 instance to use its configuration. If not, then please set $this->config manually.
+     * @author Damian Kęska <damian@pantheraframework.org>
      */
-    protected static function getPlugins() {
-        return static::$plugins
-            ?: static::$plugins = new PluginContainer();
+    public function __construct($tplInstance = '')
+    {
+        if ($tplInstance && $tplInstance instanceOf Rain\RainTPL4)
+        {
+            $this->config = $tplInstance->config;
+            $this->plugins = $tplInstance->plugins;
+            $this->registeredTags = $tplInstance->registeredTags;
+        }
     }
 
     /**
      * Compile the file and save it in the cache
      *
-     * @param string $templateDirectory
-     * @param string $templateFilepath
-     * @param string $parsedTemplateFilepath: cache file where to save the template
+     * @param string $templateFilepath Path to template file
+     * @param string $parsedTemplateFilepath Cache file path where to save the template
      */
     public function compileFile($templateFilepath, $parsedTemplateFilepath)
     {
@@ -144,7 +137,7 @@ class Parser
             $code = preg_replace("/<\?xml(.*?)\?>/s", /*<?*/ "##XML\\1XML##", $code);
 
             // disable php tag
-            if (!$this->config['php_enabled'])
+            if (!$this->getConfigurationKey('php_enabled'))
                 $code = str_replace(array("<?", "?>"), array("&lt;?", "?&gt;"), $code);
 
             // xml re-substitution
@@ -159,12 +152,12 @@ class Parser
             $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
 
             // create directories
-            if (!is_dir($this->config['cache_dir']))
-                mkdir($this->config['cache_dir'], 0755, TRUE);
+            if (!is_dir($this->getConfigurationKey('cache_dir')))
+                mkdir($this->getConfigurationKey('cache_dir'), 0755, TRUE);
 
             // check if the cache is writable
-            if (!is_writable($this->config['cache_dir']))
-                throw new Exception('Cache directory ' . $this->config['cache_dir'] . 'doesn\'t have write permission. Set write permission or set RAINTPL_CHECK_TEMPLATE_UPDATE to FALSE. More details on http://www.raintpl.com/Documentation/Documentation-for-PHP-developers/Configuration/');
+            if (!is_writable($this->getConfigurationKey('cache_dir')))
+                throw new Exception('Cache directory ' . $this->getConfigurationKey('cache_dir') . 'doesn\'t have write permission. Set write permission or set RAINTPL_CHECK_TEMPLATE_UPDATE to FALSE. More details on http://www.raintpl.com/Documentation/Documentation-for-PHP-developers/Configuration/');
 
             // write compiled file
             file_put_contents($parsedTemplateFilepath, $parsedCode);
@@ -196,7 +189,7 @@ class Parser
             $code = preg_replace("/<\?xml(.*?)\?>/s", "##XML\\1XML##", $code);
 
             // disable php tag
-            if (!$this->config['php_enabled'])
+            if (!$this->getConfigurationKey('php_enabled'))
                 $code = str_replace(array("<?", "?>"), array("&lt;?", "?&gt;"), $code);
 
             // xml re-substitution
@@ -211,12 +204,12 @@ class Parser
             $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
 
             // create directories
-            if (!is_dir($this->config['cache_dir']))
-                mkdir($this->config['cache_dir'], 0755, true);
+            if (!is_dir($this->getConfigurationKey('cache_dir')))
+                mkdir($this->getConfigurationKey('cache_dir'), 0755, true);
 
             // check if the cache is writable
-            if (!is_writable($this->config['cache_dir']))
-                throw new Exception('Cache directory ' . $this->config['cache_dir'] . 'doesn\'t have write permission. Set write permission or set RAINTPL_CHECK_TEMPLATE_UPDATE to false. More details on http://www.raintpl.com/Documentation/Documentation-for-PHP-developers/Configuration/');
+            if (!is_writable($this->getConfigurationKey('cache_dir')))
+                throw new Exception('Cache directory ' . $this->getConfigurationKey('cache_dir') . 'doesn\'t have write permission. Set write permission or set RAINTPL_CHECK_TEMPLATE_UPDATE to false. More details on http://www.raintpl.com/Documentation/Documentation-for-PHP-developers/Configuration/');
 
             // write compiled file
             fwrite($fp, $parsedCode);
@@ -253,7 +246,7 @@ class Parser
                 break;
 
             $sChar = substr($code, $current + 1, 1);
-            $sCharMatch = (substr($code, $current + 1, 1) === ' ' || $sChar === "\t" || $sChar === "\n" || $sChar === "\r" /*|| ($this->config['ignore_single_quote'] && $sChar === "'")*/); // condition that check if there is any space or special character after "{"
+            $sCharMatch = (substr($code, $current + 1, 1) === ' ' || $sChar === "\t" || $sChar === "\n" || $sChar === "\r" /*|| ($this->getConfigurationKey('ignore_single_quote') && $sChar === "'")*/); // condition that check if there is any space or special character after "{"
 
             if (!$sCharMatch)
             {
@@ -339,7 +332,8 @@ class Parser
         $compilationTime = microtime(true);
         $blockIterations = 0;
 
-        if (isset($this->config['raintpl3_plugins_compatibility']) && $this->config['raintpl3_plugins_compatibility'])
+        // @TODO: Use class/methods inheritance to implement backwards compatibility
+        if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
         {
             // execute plugins, before parse
             $context = static::getPlugins()->createContext(array(
@@ -353,14 +347,14 @@ class Parser
         }
 
         // remove comments
-        if ($this->config['remove_comments'])
+        if ($this->getConfigurationKey('remove_comments'))
         {
             $code = preg_replace('/<!--(.*)-->/Uis', '', $code);
         }
 
         // Testing parser configuration:
-        //$this->config['ignore_single_quote'] = true;
-        //$this->config['ignore_unknown_tags'] = true;
+        //$this->setConfigurationKey('ignore_single_quote', true);
+        //$this->setConfigurationKey('ignore_unknown_tags', true);
 
         list($codeSplit, $blockPositions) = $this->prepareCodeSplit($code);
 
@@ -368,8 +362,8 @@ class Parser
         if ($codeSplit)
         {
             // pre-detect option (could speed up compilation time)
-            $preDetect = (isset($this->config['pre_detect']) && $this->config['pre_detect']);
-            $profiler = (isset($this->config['profiler']) && $this->config['profiler']);
+            $preDetect = $this->getConfigurationKey('pre_detect');
+            $profiler = $this->getConfigurationKey('profiler');
 
             // pass all blocks to this parser
             $passAllBlocksTo = '';
@@ -405,7 +399,7 @@ class Parser
                 // run tag parsers only on tags, exclude "{ " from parsing
                 $starts = substr($part, 1, 1);
 
-                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t"/* || ($this->config['ignore_single_quote'] && $starts == "'") */|| strpos($part, "\n") !== false)
+                if (substr($part, 0, 1) !== '{' || $starts == ' ' || $starts == "\n" || $starts == "\t"/* || ($this->getConfigurationKey('ignore_single_quote') && $starts == "'") */|| strpos($part, "\n") !== false)
                     continue;
 
                 // tag parser found?
@@ -496,7 +490,7 @@ class Parser
                     }
                 }
 
-                if ($found === false && (!isset($this->config['ignore_unknown_tags']) || !$this->config['ignore_unknown_tags']))
+                if ($found === false && !$this->getConfigurationKey('ignore_unknown_tags'))
                 {
                     $pos = $this->findLine($index, $blockPositions, $code);
                     $e = new SyntaxException('Error! Unknown tag "' .$part. '", loaded by ' .$templateFilepath. ' at line ' .$pos['line']. ', offset ' .$pos['offset'], 1, null, $pos['line'], $templateFilepath);
@@ -525,14 +519,14 @@ class Parser
         // optimize output
         $parsedCode = str_replace('?><?php', '', $parsedCode);
 
-        if (isset($this->config['print_parsed_code']) && $this->config['print_parsed_code'])
+        if ($this->getConfigurationKey('print_parsed_code'))
         {
             print($parsedCode);
             exit;
         }
 
         // execute plugins, after_parse
-        if (isset($this->config['raintpl3_plugins_compatibility']) && $this->config['raintpl3_plugins_compatibility'])
+        if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
         {
             $context = static::getPlugins()->createContext(array(
                 'code' => $code,
@@ -554,8 +548,8 @@ class Parser
      * Find a line number and byte offset of {code} tag in compiled file
      *
      * @param int $partIndex Code part index
-     * @param array $codeSplit Splitted code (and not only code) parts
      * @param array $blockPositions Index of positions of all splitted code parts
+     * @param string $code Complete source code of a template
      *
      * @author Damian Kęska <damian@pantheraframework.org>
      * @return array
@@ -587,6 +581,7 @@ class Parser
      * @param int $start String/character position
      * @param null|int $end String/character ending position (if 1 byte character then it could be possibly $start = $end)
      *
+     * @todo Ignore escaped quotes eg. \"
      * @author Damian Kęska <damian@pantheraframework.org>
      * @return array Exact position of a quote set that is containing our search
      */
@@ -1250,7 +1245,7 @@ class Parser
         {
             $type = 'if';
             $posX = 2; // include =" at beginning
-            $posY = 2; // include " at ending
+            $posY = 2; // and " at ending
             $len = 3;
 
         } elseif ($tagType === '{if ') {
@@ -1568,9 +1563,9 @@ class Parser
         $found = false;
 
         // select in all include paths
-        if (isset($this->config['tpl_dir']))
+        if ($this->getConfigurationKey('tpl_dir'))
         {
-            $path = Tpl::resolveTemplatePath($includeTemplate, $this->config['tpl_dir'], $templateFilePath, $this->config['tpl_ext']);
+            $path = Tpl::resolveTemplatePath($includeTemplate, $this->getConfigurationKey('tpl_dir'), $templateFilePath, $this->getConfigurationKey('tpl_ext'));
 
             // if its a path string OR a $variable OR a constant
             if ($path)
@@ -1825,41 +1820,23 @@ class Parser
         return $newArray;
     }
 
-    protected function modifierReplace($html)
+    /**
+     * This function should be removed and a sandboxing plugin should be created in its place
+     *
+     * @deprecated
+     * @param $html
+     * @return bool
+     */
+    protected function blackList($html)
     {
-        $this->blackList($html);
-
-        if (strpos($html,'|') !== false && substr($html,strpos($html,'|')+1,1) != "|")
-        {
-            preg_match('/([\$a-z_A-Z0-9\(\),\[\]"->]+)\|([\$a-z_A-Z0-9\(\):,\[\]"->]+)/i', $html,$result);
-
-            $function_params = $result[1];
-            $result[2] = str_replace("::", "@double_dot@", $result[2] );
-            $explode = explode(":",$result[2]);
-            $function = str_replace('@double_dot@', '::', $explode[0]);
-            $params = isset($explode[1]) ? "," . $explode[1] : null;
-
-            $html = str_replace($result[0],$function . "(" . $function_params . "$params)",$html);
-
-            if (strpos($html,'|') !== false && substr($html,strpos($html,'|')+1,1) != "|")
-            {
-                $html = $this->modifierReplace($html);
-            }
-        }
-
-        return $html;
-    }
-
-    protected function blackList($html) {
-
-        if (!isset(static::$conf['sandbox']) || !static::$conf['sandbox'] || !static::$black_list)
+        if (!$this->getConfigurationKey('sandbox') || !$this->blackList)
             return true;
 
-        if (empty(static::$conf['black_list_preg']))
-            static::$conf['black_list_preg'] = '#[\W\s]*' . implode('[\W\s]*|[\W\s]*', static::$black_list) . '[\W\s]*#';
+        if (!$this->getConfigurationKey('black_list_preg'))
+            $this->setConfigurationKey('black_list_preg', '#[\W\s]*' . implode('[\W\s]*|[\W\s]*', $this->blackList) . '[\W\s]*#');
 
         // check if the function is in the black list (or not in white list)
-        if (preg_match(static::$conf['black_list_preg'], $html, $match)) {
+        if (preg_match($this->getConfigurationKey('black_list_preg'), $html, $match)) {
 
             // find the line of the error
             $line = 0;
@@ -1868,29 +1845,13 @@ class Parser
                 $line++;
 
             // stop the execution of the script
-            $e = new SyntaxException('Syntax ' . $match[0] . ' not allowed in template: ' . $this->templateInfo['template_filepath'] . ' at line ' . $line);
+            $e = new SyntaxException('Syntax ' . $match[0] . ' not allowed in template: ' . $this->templateInfo['template_filepath'] . ' at line ' . $line, 5);
             throw $e->templateFile($this->templateInfo['template_filepath'])
                 ->tag($match[0])
                 ->templateLine($line);
 
             return false;
         }
-    }
-
-    public static function reducePath($path)
-    {
-        // reduce the path
-        $path = str_replace("://", "@not_replace@", $path);
-        $path = preg_replace("#(/+)#", "/", $path);
-        $path = preg_replace("#(/\./+)#", "/", $path);
-        $path = str_replace("@not_replace@", "://", $path);
-
-        while (preg_match( '#\.\./#', $path))
-        {
-            $path = preg_replace('#\w+/\.\./#', '', $path );
-        }
-
-        return $path;
     }
 
     /**

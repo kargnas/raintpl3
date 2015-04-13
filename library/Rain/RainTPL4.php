@@ -11,6 +11,9 @@ use Rain\Tpl\NotFoundException;
  */
 class RainTPL4
 {
+    use Tpl\RainTPLConfiguration;
+    use Tpl\RainTPLEventsHandler;
+
     /**
      * List of all assigned variables
      *
@@ -27,7 +30,7 @@ class RainTPL4
      */
     public $config = array(
         // backwards compatibility
-        'raintpl3_plugins_compatibility' => true,
+        'raintpl3_plugins_compatibility' => false,
 
         'checksum' => array(),
         'charset' => 'UTF-8',
@@ -75,10 +78,13 @@ class RainTPL4
      * @param bool $toString if the method should return a string
      * @param bool $isString if input is a string, not a file path or echo the output
      *
+     * @event engine.draw.before $templateFilePath, $toString, $isString
+     * @event engine.draw.after $templateFilePath, $toString, $isString, $html
      * @return void|string depending of the $toString
      */
     public function draw($templateFilePath, $toString = FALSE, $isString = FALSE)
     {
+        list($templateFilePath, $toString, $isString) = $this->executeEvent('engine.draw.before', array($templateFilePath, $toString, $isString));
         extract($this->variables);
         ob_start();
 
@@ -101,6 +107,8 @@ class RainTPL4
             $this->getPlugins()->run('afterDraw', $context);
             $html = $context->code;
         }
+
+        list($templateFilePath, $toString, $isString, $html) = $this->executeEvent('engine.draw.after', array($templateFilePath, $toString, $isString, $html));
 
         if ($toString)
             return $html;
@@ -144,6 +152,8 @@ class RainTPL4
      * Clean the expired files from
      *
      * @param int $expireTime Expiration time
+     *
+     * @event engine.clean $files
      * @return string[] List of removed files
      */
     public function clean($expireTime = 2592000)
@@ -151,6 +161,9 @@ class RainTPL4
         $files = glob($this->getConfigurationKey('cache_dir') . "*.rtpl.php");
         $time = time() - $expireTime;
         $removed = array();
+
+        // plugins support
+        $files = $this->executeEvent('engine.clean', $files);
 
         foreach ($files as $file)
         {
@@ -171,6 +184,7 @@ class RainTPL4
      * @param string $parse Regular expression to parse the tag
      * @param callable $function Function to call to parse a tag
      *
+     * @event engine.registerTag $tag
      * @return array
      */
     public function & registerTag($tag, $parse, $function)
@@ -180,42 +194,10 @@ class RainTPL4
             'function' => $function,
         );
 
+        $this->executeEvent('engine.registerTag', $tag);
         return $this->registeredTags;
     }
 
-    /**
-     * Registers a plugin globally.
-     *
-     * @deprecated
-     * @param \Rain\Tpl\IPlugin $plugin
-     * @param string $name name can be used to distinguish plugins of same class.
-     */
-    public function registerPlugin(Tpl\IPlugin $plugin, $name = '')
-    {
-        $name = (string)$name ?: \get_class($plugin);
-        $this->getPlugins()->addPlugin($name, $plugin);
-    }
-
-    /**
-     * Removes registered plugin from stack.
-     *
-     * @param string $name
-     */
-    public function removePlugin($name)
-    {
-        $this->getPlugins()->removePlugin($name);
-    }
-
-    /**
-     * Returns plugin container.
-     *
-     * @return \Rain\Tpl\PluginContainer
-     */
-    protected function getPlugins()
-    {
-        return $this->plugins
-            ?: $this->plugins = new Tpl\PluginContainer();
-    }
 
     /**
      * Resolve template path
@@ -226,7 +208,7 @@ class RainTPL4
      * @param string $defaultExtension (Optional) Default file extension to append when no extension specified
      *
      * @author Damian Kęska <damian.keska@fingo.pl>
-     * @return string
+     * @return string|null
      */
     public static function resolveTemplatePath($template, $templateDirectories = null, $parentTemplateFilePath = null, $defaultExtension = null)
     {
@@ -271,9 +253,12 @@ class RainTPL4
      * @param int|null|numeric $parentTemplateLine (Optional) Line from parent template that called this method
      * @param int|null|numeric $parentTemplateOffset (Optional) Offset of parent template where is this function called
      *
+     * @throws NotFoundException
      * @throws Tpl\Exception
-     * @throws \Rain\Tpl\NotFoundException
-     *
+     * @throws Tpl_Exception
+     * @throws string
+     * @event engine.checkTemplate.path $path
+     * @event engine.checkTemplate.compile $path, $parsedTemplateFilepath
      * @return string Compiled template absolute path
      */
     protected function checkTemplate($template, $parentTemplateFilePath = null, $parentTemplateLine = null, $parentTemplateOffset = null)
@@ -287,9 +272,10 @@ class RainTPL4
         $path = str_replace(array('//', '//'), '/', $path);
 
         $parsedTemplateFilepath = $this->getConfigurationKey('cache_dir') . basename($originalTemplate) . "." . md5(dirname($path) . serialize($this->getConfigurationKey('checksum')) . $originalTemplate) . '.rtpl.php';
+        $path = $this->executeEvent('engine.checkTemplate.path', $path);
 
         // if the template doesn't exsist throw an error
-        if (!$path)
+        if (!$path && $path !== false)
         {
             $traceString = '';
 
@@ -305,7 +291,7 @@ class RainTPL4
          *
          * @config bool allow_compile
          */
-        if (!$this->config['allow_compile'])
+        if (!$this->getConfigurationKey('allow_compile'))
         {
             // check if there is a compiled version
             if (!is_file($parsedTemplateFilepath))
@@ -323,7 +309,8 @@ class RainTPL4
          */
         if ($this->getConfigurationKey('debug') or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($path)))
         {
-            $parser = new Tpl\Parser($this->config, $this->config, $this->config, $this->plugins, $this->registeredTags);
+            list($path, $parsedTemplateFilepath) = $this->executeEvent('engine.checkTemplate.compile', array($path, $parsedTemplateFilepath));
+            $parser = new Tpl\Parser($this);
             $parser->compileFile($path, $parsedTemplateFilepath);
         }
 
@@ -334,39 +321,25 @@ class RainTPL4
      * Compile a string if necessary
      *
      * @param string $string RainTpl template string to compile
+     *
+     * @event engine.checkString $string
      * @return string full filepath that php must use to include
      */
     protected function checkString($string)
     {
+        $string = $this->executeEvent('engine.checkString', $string);
+
         // set filename
-        $templateName = md5($string . implode($this->config['checksum']));
-        $parsedTemplateFilepath = $this->config['cache_dir'] . $templateName . '.s.rtpl.php';
+        $templateName = md5($string . implode($this->getConfigurationKey('checksum')));
+        $parsedTemplateFilepath = $this->getConfigurationKey('cache_dir') . $templateName . '.s.rtpl.php';
 
         // Compile the template if the original has been updated
         if ($this->getConfigurationKey('debug') || !file_exists($parsedTemplateFilepath))
         {
-            $parser = new Tpl\Parser($this->config, $this->config, $this->config, $this->plugins, $this->registeredTags);
+            $parser = new Tpl\Parser($this);
             $parser->compileString($templateName, $parsedTemplateFilepath, $string);
         }
 
         return $parsedTemplateFilepath;
-    }
-
-    /**
-     * Get configuration value by key name
-     *
-     * @param string $key Configuration key name
-     *
-     * @author Damian Kęska <damian@pantheraframework.org>
-     * @return mixed|null
-     */
-    public function getConfigurationKey($key)
-    {
-        if (isset($this->config[$key]))
-        {
-            return $key;
-        }
-
-        return null;
     }
 }

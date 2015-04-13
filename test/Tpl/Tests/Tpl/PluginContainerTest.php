@@ -1,4 +1,5 @@
 <?php
+/*
 require_once __DIR__ . '/../TplTest.php';
 
 class PluginContainerTest extends PHPUnit_Framework_TestCase
@@ -88,3 +89,4 @@ class PluginContainerTest extends PHPUnit_Framework_TestCase
 		$this->assertEquals('value', $context['param']);
 	}
 }
+*/

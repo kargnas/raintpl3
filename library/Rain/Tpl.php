@@ -9,6 +9,7 @@ use Rain\Tpl\NotFoundException;
  *  Realized by Federico Ulfo & maintained by the Rain Team
  *  Distributed under GNU/LGPL 3 License
  *
+ *  @deprecated
  *  @version 3.0 Alpha milestone: https://github.com/rainphp/raintpl3/issues/milestones?with_issues=no
  */
 class Tpl {
@@ -351,9 +352,9 @@ class Tpl {
         /**
          * Run the parser if file was not updated since last compilation time
          */
-        if ( $this->config['debug'] or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($path)))
+        if ($this->config['debug'] or !file_exists($parsedTemplateFilepath) or ( filemtime($parsedTemplateFilepath) < filemtime($path)))
         {
-            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+            $parser = new Tpl\Parser($this);
             $parser->compileFile($path, $parsedTemplateFilepath);
         }
 
@@ -375,7 +376,7 @@ class Tpl {
         // Compile the template if the original has been updated
         if ($this->config['debug'] || !file_exists($parsedTemplateFilepath))
         {
-            $parser = new Tpl\Parser($this->config, $this->objectConf, static::$conf, static::$plugins, static::$registered_tags);
+            $parser = new Tpl\Parser($this);
             $parser->compileString($templateName, $parsedTemplateFilepath, $string);
         }
 

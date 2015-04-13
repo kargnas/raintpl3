@@ -1,34 +1,30 @@
 <?php
-
 // include
 require "library/Rain/autoload.php";
 
 // namespace
 use Rain\Tpl;
 
-
-// config
-$config = array(
+$rain = new Rain\RainTPL4;
+$rain->setConfiguration(array(
     "base_url"      => null,
     "tpl_dir"       => "templates/test/",
-    "cache_dir"     => "cache/",
+    "cache_dir"     => "/tmp/",
     "remove_comments" => true,
     "debug"         => true, // set to false to improve the speed
-);
-
-Tpl::configure( $config );
-
+    "ignore_unknown_tags"   => true,
+));
 
 // Add PathReplace plugin (necessary to load the CSS with path replace)
-Tpl::registerPlugin( new Tpl\Plugin\PathReplace() );
+//$rain->registerPlugin( new Tpl\Plugin\PathReplace() );
 
 
 // set variables
-$var = array(
+$rain->assign(array(
     "variable"  => "Hello World!",
     "bad_variable"  => "<script>alert('evil javascript here');</script>",
     "safe_variable"  => "<script>console.log('this is safe')</script>",
-    "version"   => "3.0 Alpha",
+    "version"   => "3.1 Beta",
     "menu"		=> array(
         array("name" => "Home", "link" => "index.php", "selected" => true ),
         array("name" => "FAQ", "link" => "index.php/FAQ/", "selected" => null ),
@@ -38,24 +34,24 @@ $var = array(
     "user"		=> (object) array("name"=>"Rain", "citizen" => "Earth", "race" => "Human" ),
     "numbers"	=> array( 3, 2, 1 ),
     "bad_text"	=> 'Hey this is a malicious XSS <script>alert("auto_escape is always enabled");</script>',
-    "table"		=> array( array( "Apple", "1996" ), array( "PC", "1997" ) ),
+    "table"		=> array( array( "Apple", "1996" ), array( "PC", "1997", "1998" ) ),
     "title"		=> "Rain TPL 3 - Easy and Fast template engine",
     "copyright" => "Copyright 2006 - 2012 Rain TPL<br>Project By Rain Team",
 
-);
+));
 
 // add a tag
-Tpl::registerTag(	"({@.*?@})", // preg split
+/*$rain->registerTag(	"({@.*?@})", // preg split
     "{@(.*?)@}", // preg match
     function( $params ){ // function called by the tag
         $value = $params[1][0];
         return "Translate: <b>$value</b>";
     }
-);
+);*/
 
 
 // add a tag
-Tpl::registerTag(	"({%.*?%})", // preg split
+/*$rain->registerTag(	"({%.*?%})", // preg split
     "{%(.*?)(?:\|(.*?))%}", // preg match
     function( $params ){ // function called by the tag
         $value = $params[1][0];
@@ -63,17 +59,15 @@ Tpl::registerTag(	"({%.*?%})", // preg split
 
         return "Translate: <b>$value</b> in <b>$value2</b>";
     }
-);
+);*/
 
 // draw
-$tpl = new Tpl;
-$tpl->assign( $var );
-echo $tpl->draw( "test" );
+echo $rain->draw("test");
 
 
 
 class Test{
-    static public function method( $variable ){
+    static public function method($variable){
         echo "Hi I am a static method, and this is the parameter passed to me: $variable!";
     }
 }
