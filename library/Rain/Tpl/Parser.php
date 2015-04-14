@@ -100,6 +100,8 @@ class Parser
      * Constructor
      *
      * @param RainTPL4|string|null $tplInstance Pass RainTPL4 instance to use its configuration. If not, then please set $this->config manually.
+     *
+     * @event parser.__construct $tplInstance
      * @author Damian Kęska <damian@pantheraframework.org>
      */
     public function __construct($tplInstance = '')
@@ -110,6 +112,8 @@ class Parser
             $this->plugins = $tplInstance->plugins;
             $this->registeredTags = $tplInstance->registeredTags;
         }
+
+        $this->executeEvent('parser.__construct', $tplInstance);
     }
 
     /**
@@ -117,9 +121,19 @@ class Parser
      *
      * @param string $templateFilepath Path to template file
      * @param string $parsedTemplateFilepath Cache file path where to save the template
+     *
+     * @throws Exception
+     * @throws Rain\Tpl_Exception
+     *
+     * @event parser.compileFile.compiled $templateFilepath, $parsedTemplateFilepath, $parsedCode
+     * @event parser.compileFile.before $templateFilepath, $parsedTemplateFilepath
+     *
+     * @return string
      */
     public function compileFile($templateFilepath, $parsedTemplateFilepath)
     {
+        list($templateFilepath, $parsedTemplateFilepath) = $this->executeEvent('parser.compileFile.before', array($templateFilepath, $parsedTemplateFilepath));
+
         // open the template
         $fp = fopen($templateFilepath, "r");
         $parsedCode = '';
@@ -150,6 +164,8 @@ class Parser
 
             // fix the php-eating-newline-after-closing-tag-problem
             $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
+
+            list($templateFilepath, $parsedTemplateFilepath, $parsedCode) = $this->executeEvent('parser.compileFile.compiled', array($templateFilepath, $parsedTemplateFilepath, $parsedCode));
 
             // create directories
             if (!is_dir($this->getConfigurationKey('cache_dir')))
@@ -226,6 +242,10 @@ class Parser
      * Split code into parts that should contain {code} tavar_dump($templateFilepath);gs and HTML as separate elements
      *
      * @param string $code Input TPL code
+     *
+     * @event parser.prepareCodeSplit.before $code
+     * @event parser.prepareCodeSplit.after $split, $blockPositions
+     *
      * @author Damian Kęska <damian@pantheraframework.org>
      * @return array
      */
@@ -237,6 +257,8 @@ class Parser
         $blockPositions = array();
         $arrIndex = -1;
         $lastBlockType = '';
+
+        $code = $this->executeEvent('parser.prepareCodeSplit.before', $code);
 
         while ($current !== false)
         {
@@ -308,7 +330,7 @@ class Parser
         // uncomment to see how the template is divided into parts
         //print_r($split);
 
-        return array($split, $blockPositions);
+        return $this->executeEvent('parser.prepareCodeSplit.after', array($split, $blockPositions));
     }
 
     /**
@@ -319,9 +341,13 @@ class Parser
      * @param $isString
      * @param $templateDirectory
      * @param $templateFilepath
+     *
+     * @event parser.compileTemplate.unknownTag $pos, $part, $templateFilepath
+     * @event parser.compileTemplate.notClosedTag $tag
+     * @event parser.compileTemplate.after $parsedCode, $templateFilepath
+     *
      * @throws \Rain\Tpl_Exception
      * @throws string
-     *
      * @return null|string
      */
     protected function compileTemplate($code, $templateFilepath)
@@ -333,7 +359,7 @@ class Parser
         $blockIterations = 0;
 
         // @TODO: Use class/methods inheritance to implement backwards compatibility
-        if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
+        /*if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
         {
             // execute plugins, before parse
             $context = static::getPlugins()->createContext(array(
@@ -344,7 +370,7 @@ class Parser
 
             static::getPlugins()->run('beforeParse', $context);
             $code = $context->code;
-        }
+        }*/
 
         // remove comments
         if ($this->getConfigurationKey('remove_comments'))
@@ -419,7 +445,7 @@ class Parser
                     )));
 
                     if ($preDetectTag == '$') $preDetectTag = 'variable';
-                    if ($preDetectTag == '#') $predetectTag = 'constant';
+                    if ($preDetectTag == '#') $preDetectTag = 'constant';
 
                     if (isset(static::$tags[$preDetectTag]) && static::$tags[$preDetectTag])
                     {
@@ -493,8 +519,12 @@ class Parser
                 if ($found === false && !$this->getConfigurationKey('ignore_unknown_tags'))
                 {
                     $pos = $this->findLine($index, $blockPositions, $code);
-                    $e = new SyntaxException('Error! Unknown tag "' .$part. '", loaded by ' .$templateFilepath. ' at line ' .$pos['line']. ', offset ' .$pos['offset'], 1, null, $pos['line'], $templateFilepath);
-                    throw $e->templateFile($templateFilepath);
+
+                    if ($this->executeEvent('parser.compileTemplate.unknownTag', array($pos, $part, $templateFilepath)) !== true)
+                    {
+                        $e = new SyntaxException('Error! Unknown tag "' .$part. '", loaded by ' .$templateFilepath. ' at line ' .$pos['line']. ', offset ' .$pos['offset'], 1, null, $pos['line'], $templateFilepath);
+                        throw $e->templateFile($templateFilepath);
+                    }
                 }
             }
 
@@ -504,6 +534,9 @@ class Parser
                 {
                     if (isset($data['level']) && intval($data['level']) > 1)
                     {
+                        if ($this->executeEvent('parser.compileTemplate.notClosedTag', $tag) === true)
+                            continue;
+
                         $e = new SyntaxException("Error! You need to close an {' .$tag. '} tag, in file ".$templateFilepath, 2, null, 'unknown', $templateFilepath);
                         throw $e->templateFile($templateFilepath);
                     }
@@ -519,14 +552,18 @@ class Parser
         // optimize output
         $parsedCode = str_replace('?><?php', '', $parsedCode);
 
+        // debugging
         if ($this->getConfigurationKey('print_parsed_code'))
         {
             print($parsedCode);
             exit;
         }
 
+        // execute plugins
+        list($parsedCode, $templateFilepath) = $this->executeEvent('parser.compileTemplate.after', array($parsedCode, $templateFilepath));
+
         // execute plugins, after_parse
-        if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
+        /*if ($this->getConfigurationKey('raintpl3_plugins_compatibility'))
         {
             $context = static::getPlugins()->createContext(array(
                 'code' => $code,
@@ -539,7 +576,7 @@ class Parser
             $compilationTime = (microtime(true) - $compilationTime);
 
             $parsedCode = $context->code;
-        }
+        }*/
 
         return $parsedCode;
     }
