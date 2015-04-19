@@ -35,7 +35,7 @@
             $this->engine = new \Rain\RainTPL4;
             $this->engine->setConfiguration(array(
                 'debug' => true,
-                'tpl_dir' => '/tmp/',
+                'tpl_dir' => realpath(__DIR__. '/../templates'),
                 'cache_dir' => '/tmp/',
             ));
         }

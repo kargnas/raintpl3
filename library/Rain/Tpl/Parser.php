@@ -1602,17 +1602,12 @@ class Parser
         // select in all include paths
         if ($this->getConfigurationKey('tpl_dir'))
         {
-            $path = Tpl::resolveTemplatePath($includeTemplate, $this->getConfigurationKey('tpl_dir'), $templateFilePath, $this->getConfigurationKey('tpl_ext'));
-
-            // if its a path string OR a $variable OR a constant
-            if ($path)
+            if (substr($includeTemplate, 0, 1) == '$' || defined($includeTemplate))
             {
-                $part = '<?php require $this->checkTemplate("' . $path . '", "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
-                $found = true;
-
-            } elseif (substr($includeTemplate, 0, 1) == '$' || defined($includeTemplate)) {
-
                 $part = '<?php require $this->checkTemplate(' . $includeTemplate . ', "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
+                $found = true;
+            } else {
+                $part = '<?php require $this->checkTemplate("' . $includeTemplate . '", "' .$templateFilePath. '", ' .intval($context['line']). ', ' .intval($context['offset']). ');?>';
                 $found = true;
             }
 

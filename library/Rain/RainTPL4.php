@@ -31,6 +31,7 @@ class RainTPL4
     public $config = array(
         // backwards compatibility
         'raintpl3_plugins_compatibility' => false,
+        'print_parsed_code' => false,
 
         'checksum' => array(),
         'charset' => 'UTF-8',
