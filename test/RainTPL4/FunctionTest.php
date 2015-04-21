@@ -8,17 +8,22 @@ class FunctionTest extends RainTPLTestCase
 {
     /**
      * <code>{function="Date( 'c', $value.Time )"}">{$value.Time|FullDate}</code>
+     * <data-time>2015-05-05 10:00</data-time>
+     * <expects>2015-05-05T10:00:00+02:00">2015-05-05 10:00</expects>
      *
      * @author Damian Kęska <damian@pantheraframework.org>
      */
-    public function testFunctionVarReplace()
+    public function testXPawFunctionVarReplace()
     {
         $this->setupRainTPL4();
         $this->engine->assign('value', array(
-            'Time' => strtotime('2015-05-05 10:00'),
+            'Time' => strtotime($this->getExampleDataFromPHPDoc('time')),
         ));
         //$this->engine->setConfigurationKey('print_parsed_code', true);
-        $this->assertEquals('2015-05-05T10:00:00+02:00">2015-05-05 10:00', $this->engine->drawString($this->getTestCodeFromPHPDoc(), true));
+        $this->assertEquals(
+            $this->getExpectationsFromPHPDoc(),
+            $this->engine->drawString($this->getTestCodeFromPHPDoc(), true)
+        );
     }
 
     /**
@@ -34,7 +39,7 @@ class FunctionTest extends RainTPLTestCase
      * @author xPaw <github@xpaw.me>
      * @author Damian Kęska <damian@pantheraframework.org>
      */
-    public function testXPawFunctionVarReplace()
+    public function testXPawFunctionVarReplaceInArray()
     {
         $this->setupRainTPL4();
         $this->engine->assign('app_history', array(
