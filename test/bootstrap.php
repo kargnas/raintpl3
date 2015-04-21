@@ -39,4 +39,63 @@
                 'cache_dir' => '/tmp/',
             ));
         }
+
+        /**
+         * Cut off code that is placed between two strings
+         *
+         * @param int $starting eg. <code>
+         * @param int $ending eg. </code>
+         * @param int $i Callstack number
+         *
+         * @author Damian Kęska <damian.keska@fingo.pl>
+         * @return string
+         */
+        protected function takeCodeBetweenTags($starting, $ending, $i = 2)
+        {
+            $callStack = debug_backtrace();
+            $reflection = new ReflectionMethod($callStack[$i]['class'], $callStack[$i]['function']);
+            $phpDoc = $reflection->getDocComment();
+
+            $pos = stripos($phpDoc, $starting);
+
+            if ($pos !== false)
+            {
+                $endingPos = stripos($phpDoc, $ending, $pos);
+
+                // get text inside of <code></code>
+                $body = trim(substr($phpDoc, ($pos + strlen($starting)), ($endingPos - $pos - strlen($starting))));
+
+                // split into lines to strip whitespaces and "*"
+                $lines = explode("\n", $body);
+
+                foreach ($lines as &$line)
+                {
+                    $pos = strpos($line, '*');
+
+                    if ($pos !== false)
+                        $line = substr($line, ($pos + 1), strlen($line));
+                }
+
+                return trim(implode("\n", $lines));
+            }
+
+            return '';
+        }
+
+        /**
+         * Get test case code from <code></code> tags
+         * This is very useful function for keeping well formatted test case in PHPDoc comment that will be loaded into testing code
+         *
+         * @author Damian Kęska <damian.keska@fingo.pl>
+         * @return string
+         */
+        public function getTestCodeFromPHPDoc()
+        {
+            return $this->takeCodeBetweenTags('<code>', '</code>', 2);
+        }
+
+        public function getExpectationsFromPHPDoc()
+        {
+            return $this->takeCodeBetweenTags('<expects>', '</expects>', 2);
+        }
     }
