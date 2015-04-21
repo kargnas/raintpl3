@@ -650,8 +650,13 @@ class Parser
      */
     protected function varReplace($html, $loopLevel = NULL, $escape = TRUE, $echo = FALSE, $updateModifier = TRUE)
     {
+        if ($loopLevel === 'auto' && isset($this->tagData['loop']) && isset($this->tagData['loop']['level']))
+        {
+            $loopLevel = $this->tagData['loop']['level'];
+        }
+
         // change variable name if loop level
-        if (!empty($loopLevel))
+        if (!empty($loopLevel) && $loopLevel !== 'auto')
             $html = preg_replace(array('/(\$key)\b/', '/(\$value)\b/', '/(\$counter)\b/'), array('${1}' . $loopLevel, '${1}' . $loopLevel, '${1}' . $loopLevel), $html);
 
         preg_match_all('/\$([a-z_A-Z.0-9]+)/', $html, $variables);
@@ -1545,7 +1550,7 @@ class Parser
         if ($isString)
             $body = $this->parseModifiers($function);
         else
-            $body = $this->varReplace($function, null, false, false, true);
+            $body = $this->varReplace($function, 'auto', false, false, true);
 
         // function
         $part = "<?php echo ".$body. $ternary . ";?>";
