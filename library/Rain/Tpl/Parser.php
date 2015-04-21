@@ -159,8 +159,7 @@ class Parser
                     return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
                 }, $code);
 
-            $parsedCode = $this->compileTemplate($code, $templateFilepath)
-            . "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
+            $parsedCode = "<?php if(!class_exists('Rain\RainTPL4')){exit;}?>" . $this->compileTemplate($code, $templateFilepath);
 
             // fix the php-eating-newline-after-closing-tag-problem
             $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
@@ -213,8 +212,7 @@ class Parser
                     return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
                 }, $code);
 
-            $parsedCode = $this->compileTemplate($code, $isString = true, $templateDirectory = null, $templateFilepath);
-            $parsedCode = "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
+            $parsedCode = "<?php if(!class_exists('Rain\RainTPL4')){exit;}?>" . $this->compileTemplate($code, $isString = true, $templateDirectory = null, $templateFilepath);
 
             // fix the php-eating-newline-after-closing-tag-problem
             $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
