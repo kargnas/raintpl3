@@ -19,11 +19,8 @@ class FunctionTest extends RainTPLTestCase
         $this->engine->assign('value', array(
             'Time' => strtotime($this->getExampleDataFromPHPDoc('time')),
         ));
-        //$this->engine->setConfigurationKey('print_parsed_code', true);
-        $this->assertEquals(
-            $this->getExpectationsFromPHPDoc(),
-            $this->engine->drawString($this->getTestCodeFromPHPDoc(), true)
-        );
+
+        $this->autoAssertEquals();
     }
 
     /**
@@ -48,11 +45,7 @@ class FunctionTest extends RainTPLTestCase
             ),
         ));
 
-        //$this->engine->setConfigurationKey('print_parsed_code', true);
-        $this->assertEquals(
-            trim($this->getExpectationsFromPHPDoc()),
-            trim($this->engine->drawString($this->getTestCodeFromPHPDoc(), true))
-        );
+        $this->autoAssertEquals();
     }
 }
 

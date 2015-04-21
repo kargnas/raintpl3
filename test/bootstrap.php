@@ -41,6 +41,22 @@
         }
 
         /**
+         * Make a simple assert equals basing on <expects> and <code> tags from called function
+         *
+         * Please note: Uses trim to cut off whitespaces from beginging and ending of expetations and results
+         *
+         * @author Damian Kęska <damian.keska@fingo.pl>
+         * @return mixed
+         */
+        public function autoAssertEquals()
+        {
+            return $this->assertEquals(
+                trim($this->getExpectationsFromPHPDoc(3)),
+                trim($this->engine->drawString($this->getTestCodeFromPHPDoc(3), true))
+            );
+        }
+
+        /**
          * Cut off code that is placed between two strings
          *
          * @param int $starting eg. <code>
@@ -89,18 +105,18 @@
          * @author Damian Kęska <damian.keska@fingo.pl>
          * @return string
          */
-        public function getTestCodeFromPHPDoc()
+        public function getTestCodeFromPHPDoc($i = 2)
         {
-            return $this->takeCodeBetweenTags('<code>', '</code>', 2);
+            return $this->takeCodeBetweenTags('<code>', '</code>', $i);
         }
 
-        public function getExpectationsFromPHPDoc()
+        public function getExpectationsFromPHPDoc($i = 2)
         {
-            return $this->takeCodeBetweenTags('<expects>', '</expects>', 2);
+            return $this->takeCodeBetweenTags('<expects>', '</expects>', $i);
         }
 
-        public function getExampleDataFromPHPDoc($dataName = 1)
+        public function getExampleDataFromPHPDoc($dataName = 1, $i = 2)
         {
-            return $this->takeCodeBetweenTags('<data-' .$dataName. '>', '</data-' .$dataName. '>', 2);
+            return $this->takeCodeBetweenTags('<data-' .$dataName. '>', '</data-' .$dataName. '>', $i);
         }
     }
