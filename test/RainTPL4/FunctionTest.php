@@ -47,6 +47,40 @@ class FunctionTest extends RainTPLTestCase
 
         $this->autoAssertEquals();
     }
+
+    /**
+     * <code>{date('d.m.Y', $date)}</code>
+     * <data-time>2015-05-05 10:00</data-time>
+     * <expects>05.05.2015</expects>
+     *
+     * @author Damian Kęska <damian@pantheraframework.org>
+     */
+    public function testDateFormatting()
+    {
+        $this->setupRainTPL4();
+        $this->engine->assign('date',
+            strtotime($this->getExampleDataFromPHPDoc('time'))
+        );
+
+        $this->autoAssertEquals();
+    }
+
+    /**
+     * <code>{function="date('d.m.Y', $date)"}</code>
+     * <data-time>2015-05-05 10:00</data-time>
+     * <expects>05.05.2015</expects>
+     *
+     * @author Damian Kęska <damian@pantheraframework.org>
+     */
+    public function testDateFormattingAsFunctionSyntaxCall()
+    {
+        $this->setupRainTPL4();
+        $this->engine->assign('date',
+            strtotime($this->getExampleDataFromPHPDoc('time'))
+        );
+
+        $this->autoAssertEquals();
+    }
 }
 
 function FullDate($input)
