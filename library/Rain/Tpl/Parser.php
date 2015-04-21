@@ -1631,7 +1631,8 @@ class Parser
 
             $context = $this->findLine($blockIndex, $blockPositions, $code);
             throw new NotFoundException('Cannot find template "' . $includeTemplate . '" that was tried to be included from ' .$templateFilePath. ' at line ' .$context['line']. ', offset ' .$context['offset']);
-        }
+        } else
+            throw new \InvalidArgumentException('tpl_dir not specified in configuration. Please set include paths by using setConfigurationKey() method');
 
         return false;
     }
