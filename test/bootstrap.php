@@ -98,4 +98,9 @@
         {
             return $this->takeCodeBetweenTags('<expects>', '</expects>', 2);
         }
+
+        public function getExampleDataFromPHPDoc($dataName = 1)
+        {
+            return $this->takeCodeBetweenTags('<data-' .$dataName. '>', '</data-' .$dataName. '>', 2);
+        }
     }
