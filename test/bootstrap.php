@@ -95,7 +95,7 @@
                 return trim(implode("\n", $lines));
             }
 
-            return '';
+            throw new Exception($starting.$ending. ' tags not found in this test case');
         }
 
         /**
