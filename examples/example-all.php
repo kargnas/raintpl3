@@ -1,6 +1,6 @@
 <?php
 // include
-require "../library/Rain/autoload.php";
+include "../library/Rain/autoload.php";
 
 // namespace
 use Rain\Tpl;
@@ -8,7 +8,7 @@ use Rain\Tpl;
 $rain = new Rain\RainTPL4;
 $rain->setConfiguration(array(
     "base_url"      => null,
-    "tpl_dir"       => "templates/test/",
+    "tpl_dir"       => "../templates/test/",
     "cache_dir"     => "/tmp/",
     "remove_comments" => true,
     "debug"         => true, // set to false to improve the speed
@@ -63,7 +63,6 @@ $rain->assign(array(
 
 // draw
 echo $rain->draw("test");
-
 
 
 class Test{
