@@ -1,17 +1,19 @@
-RainTPL 3
+RainTPL 4
 =========
 
-By Federico Ulfo and a lot [awesome contributors](https://github.com/rainphp/raintpl3/network)!
+Originally by Federico Ulfo and a lot [awesome contributors](https://github.com/rainphp/raintpl3/network)!
+[RainTPL](http://raintpl.com) is an easy template engine for PHP that enables designers and developers to work better together, it loads HTML template to separate the view from the logic.
 
-[RainTPL](http://raintpl.com) is an easy template engine for PHP that enables designers and developers to work better together, it loads HTML template to separate the presentation from the logic.
+RainTPL4 was created as a refactored and improved RainTPL3 engine, with improved performance, new tags, better syntax and compatibility with Smarty templating engine.
 
 Features
 --------
-* Easy for designers, only 10 tags, *{$variable}*, *{#constant#}*, *{include}*, *{loop}*, *{if}*, *{* comment *}*, *{noparse}*, *{function}*
-* Easy for developers, 5 methods to load and draw templates.
-* Powerful, modifier and operation with variables
+* Faster performance than any other templating engine for PHP offering same possibilities
+* Easy for designers, simple and understandable tags known from Smarty
+* Easy for developers, 5 methods to load and draw templates
+* Powerful - modifiers on variables, strings and functions
 * Extensible, load plugins and register new tags
-* Secure, sandbox with blacklist.
+* Secure, sandbox using PHP Parser
 
 
 Installation / Usage
@@ -23,7 +25,7 @@ Installation / Usage
     ``` json
     {
         "require": {
-            "rain/raintpl": ">=3.0.0"
+            "rain/raintpl": ">=4.0.0"
         }
     }
     ```
@@ -33,7 +35,7 @@ Installation / Usage
     $ php composer.phar install
     ```
 
-4. Run one example of RainTPL with your browser: ```http://localhost/raintpl3/example.php```
+4. Run one example of RainTPL with your browser: ```http://localhost/raintpl3/examples/example-all.php```
 
 Documentation
 -------------
