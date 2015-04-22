@@ -10,11 +10,15 @@
             "email": "rainelemental@gmail.com"
         },
         {
+            "name": "Damian Kęska",
+            "email": "damian@pantheraframework.org"
+        },
+        {
             "name": "Rain Community"
         }
     ],
     "require": {
-        "php": ">=5.3"
+        "php": ">=5.4"
     },
     "require-dev": {
         "phpunit/phpunit": "4.4.*"
