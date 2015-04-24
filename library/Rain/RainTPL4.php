@@ -61,7 +61,14 @@ class RainTPL4
             'in_array', 'array_reverse', 'join', 'explode', 'strlen', 'substr', 'substr_replace', 'is_array',
             'sizeof', 'count', 'range', 'is_string', 'is_int', 'is_object', 'time', 'date', 'strtotime',
             'ob_start', 'ob_get_clean', 'ob_end_flush', 'stripslashes', 'strip_tags', 'trim', 'ltrim', 'rtrim',
-            'htmlspecialchars', 'nl2br',
+            'htmlspecialchars', 'nl2br', 'print', 'echo', 'md5', 'sha256', 'sha512', 'hash', 'str_repeat', 'str_word_count',
+            'strchr', 'chr', 'stripos', 'stristr', 'strstr', 'strcmp', 'strnatcasecmp', 'strncasecmp', 'substr_count',
+            'substr_compare', 'strtok', 'soundex', 'quotemeta', 'addslashes', 'addcslashes', 'count_chars',
+            'reset', 'sort', 'ksort', 'usort', 'array_multisort', 'uksort', 'rsort', 'shuffle', 'reset', 'pos',
+            'prev', 'next', 'natsort', 'natcasesort', 'key_exists', 'array_diff', 'array_flip', 'array_map',
+            'isset', 'array_merge', 'array_pop', 'array_push', 'array_sum', 'array_slice', 'is_long', 'is_real',
+            'is_resource', 'is_null', 'json_encode', 'serialize', 'is_scalar', 'is_real', 'is_double', 'gettype',
+            'empty', 'intval', 'floatval', 'boolval', 'doubleval', 'is_bool',
         ),
 
         'sandboxBlacklist' => array(
