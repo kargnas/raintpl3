@@ -6,22 +6,23 @@
     "license": "MIT",
     "authors": [
         {
-            "name": "Federico Ulfo",
+            "name":  "Federico Ulfo",
             "email": "rainelemental@gmail.com"
         },
         {
-            "name": "Damian Kęska",
+            "name":  "Damian Kęska",
             "email": "damian@pantheraframework.org"
         },
         {
-            "name": "Rain Community"
+            "name":  "Rain Community"
         }
     ],
     "require": {
         "php": ">=5.4"
     },
     "require-dev": {
-        "phpunit/phpunit": "4.4.*"
+        "phpunit/phpunit": "4.4.*",
+        "rain/raintpl":    "nikic/php-parser"
     },
     "minimum-stability": "dev",
     "autoload": {
