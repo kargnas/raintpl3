@@ -159,7 +159,7 @@ trait RainTPLEventsHandler
     public function loadEventsHandler($name, $path = '')
     {
         if ($path && is_file($path))
-            include $path;
+            include_once $path;
 
         if (!class_exists($name))
             return false;
