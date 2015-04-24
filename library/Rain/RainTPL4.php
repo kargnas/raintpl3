@@ -118,7 +118,7 @@ class RainTPL4
         $this->config['pluginsIncludePath'][] = __DIR__. '/Plugins/';
 
         // @debug Damian Kęska
-        $this->config['pluginsEnabled'][] = 'pseudoSandboxing';
+        //$this->config['pluginsEnabled'][] = 'pseudoSandboxing';
     }
 
     /**
