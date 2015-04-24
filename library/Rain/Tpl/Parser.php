@@ -109,7 +109,8 @@ class Parser
         if ($tplInstance && $tplInstance instanceOf Rain\RainTPL4)
         {
             $this->config = $tplInstance->config;
-            $this->plugins = $tplInstance->plugins;
+            $this->__eventHandlers = $tplInstance->__eventHandlers;
+            $this->events = $tplInstance->events;
             $this->registeredTags = $tplInstance->registeredTags;
         }
 
