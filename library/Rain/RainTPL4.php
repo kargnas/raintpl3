@@ -36,22 +36,51 @@ class RainTPL4
         'checksum' => array(),
         'charset' => 'UTF-8',
         'debug' => false,
-        'include_path' => array(),
-        'tpl_dir' => 'templates/',
-        'cache_dir' => 'cache/',
-        'tpl_ext' => 'html',
+        'include_path' => array(), // RainTPL4
+        'pluginsIncludePath' => array(), // RainTPL4
+        'pluginsEnabled' => array(), // RainTPL4
+        'tpl_dir' => 'templates/', // RainTPL4
+        'cache_dir' => 'cache/', // RainTPL4
+        'tpl_ext' => 'html', // RainTPL4
         //'ignore_single_quote' => true,
-        'predetect' => true,
+        'predetect' => true, // RainTPL4
         'base_url' => '',
         'php_enabled' => false,
         'auto_escape' => true,
-        'force_compile' => false,
-        'allow_compile' => true,
-        'allow_compile_once' => true, // allow compile template only once
-        'sandbox' => true,
-        'remove_comments' => false,
+        'force_compile' => false, // RainTPL4
+        'allow_compile' => true, // RainTPL4
+        'allow_compile_once' => true, // allow compile template only once, RainTPL4
+        'remove_comments' => false, // RainTPL4
         'registered_tags' => array(),
-        'ignore_unknown_tags' => false,
+        'ignore_unknown_tags' => false, // RainTPL4
+
+        // sandboxing, RainTPL4
+        'sandboxMode' => 'blacklist',
+        'sandboxWhitelist' => array(
+            'strpos', 'str_replace', 'str_ireplace', 'strpad', 'strtolower', 'ucfirst', 'strtoupper',
+            'in_array', 'array_reverse', 'join', 'explode', 'strlen', 'substr', 'substr_replace', 'is_array',
+            'sizeof', 'count', 'range', 'is_string', 'is_int', 'is_object', 'time', 'date', 'strtotime',
+            'ob_start', 'ob_get_clean', 'ob_end_flush', 'stripslashes', 'strip_tags', 'trim', 'ltrim', 'rtrim',
+            'htmlspecialchars', 'nl2br',
+        ),
+
+        'sandboxBlacklist' => array(
+            'exec', 'shell_exec', 'pcntl_exec', 'passthru', 'proc_open', 'system',
+            'posix_kill', 'posix_setsid', 'pcntl_fork', 'posix_uname', 'php_uname',
+            'phpinfo', 'popen', 'file_get_contents', 'file_put_contents', 'rmdir',
+            'mkdir', 'unlink', 'highlight_contents', 'symlink',
+            'apache_child_terminate', 'apache_setenv', 'define_syslog_variables',
+            'escapeshellarg', 'escapeshellcmd', 'eval', 'fp', 'fput',
+            'ftp_connect', 'ftp_exec', 'ftp_get', 'ftp_login', 'ftp_nb_fput',
+            'ftp_put', 'ftp_raw', 'ftp_rawlist', 'highlight_file', 'ini_alter',
+            'ini_get_all', 'ini_restore', 'inject_code', 'mysql_pconnect',
+            'openlog', 'passthru', 'php_uname', 'phpAds_remoteInfo',
+            'phpAds_XmlRpc', 'phpAds_xmlrpcDecode', 'phpAds_xmlrpcEncode',
+            'posix_getpwuid', 'posix_kill', 'posix_mkfifo', 'posix_setpgid',
+            'posix_setsid', 'posix_setuid', 'posix_uname', 'proc_close',
+            'proc_get_status', 'proc_nice', 'proc_open', 'proc_terminate',
+            'syslog', 'xmlrpc_entity_decode',
+        ),
     );
 
     /**
@@ -73,6 +102,19 @@ class RainTPL4
     );
 
     /**
+     * Constructor
+     *
+     * @author Damian Kęska <damian@pantheraframework.org>
+     */
+    public function __construct()
+    {
+        $this->config['pluginsIncludePath'][] = __DIR__. '/Plugins/';
+
+        // @debug Damian Kęska
+        $this->config['pluginsEnabled'][] = 'pseudoSandboxing';
+    }
+
+    /**
      * Draw the template
      *
      * @param string $templateFilePath name of the template file
@@ -85,6 +127,9 @@ class RainTPL4
      */
     public function draw($templateFilePath, $toString = FALSE, $isString = FALSE)
     {
+        // re-load plugins
+        $this->loadEventHandlers();
+
         list($templateFilePath, $toString, $isString) = $this->executeEvent('engine.draw.before', array($templateFilePath, $toString, $isString));
         extract($this->variables);
         ob_start();
@@ -344,3 +389,6 @@ class RainTPL4
         return $parsedTemplateFilepath;
     }
 }
+
+class RestrictedException extends Tpl\Exception {};
+class InvalidConfiguration extends Tpl\Exception {};
