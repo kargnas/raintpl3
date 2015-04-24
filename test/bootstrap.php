@@ -21,6 +21,8 @@
 
         public function setup()
         {
+            date_default_timezone_set('Europe/Warsaw');
+
             Rain\Tpl::configure(array(
                 'debug' => true,
                 'tpl_dir' => '/tmp/',
