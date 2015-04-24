@@ -15,6 +15,7 @@
     <testsuite name="Rain\Tpl Test">
       <directory>./test/Tpl/</directory>
       <directory>./test/issues/</directory>
+        <directory>./test/RainTPL4/</directory>
     </testsuite>
   </testsuites>
 
