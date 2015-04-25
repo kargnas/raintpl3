@@ -74,29 +74,6 @@ class Parser
     );
 
     /**
-     * Black list of functions and variables
-     *
-     * @var array
-     */
-    protected $blackList = array(
-        'exec', 'shell_exec', 'pcntl_exec', 'passthru', 'proc_open', 'system',
-        'posix_kill', 'posix_setsid', 'pcntl_fork', 'posix_uname', 'php_uname',
-        'phpinfo', 'popen', 'file_get_contents', 'file_put_contents', 'rmdir',
-        'mkdir', 'unlink', 'highlight_contents', 'symlink',
-        'apache_child_terminate', 'apache_setenv', 'define_syslog_variables',
-        'escapeshellarg', 'escapeshellcmd', 'eval', 'fp', 'fput',
-        'ftp_connect', 'ftp_exec', 'ftp_get', 'ftp_login', 'ftp_nb_fput',
-        'ftp_put', 'ftp_raw', 'ftp_rawlist', 'highlight_file', 'ini_alter',
-        'ini_get_all', 'ini_restore', 'inject_code', 'mysql_pconnect',
-        'openlog', 'passthru', 'php_uname', 'phpAds_remoteInfo',
-        'phpAds_XmlRpc', 'phpAds_xmlrpcDecode', 'phpAds_xmlrpcEncode',
-        'posix_getpwuid', 'posix_kill', 'posix_mkfifo', 'posix_setpgid',
-        'posix_setsid', 'posix_setuid', 'posix_uname', 'proc_close',
-        'proc_get_status', 'proc_nice', 'proc_open', 'proc_terminate',
-        'syslog', 'xmlrpc_entity_decode'
-    );
-
-    /**
      * Constructor
      *
      * @param RainTPL4|string|null $tplInstance Pass RainTPL4 instance to use its configuration. If not, then please set $this->config manually.
@@ -1542,9 +1519,6 @@ class Parser
                 $function .= '()';
         }
 
-        // check black list
-        $this->blackList(substr($function, 0, strpos(str_replace(' ', '', $function), '(')));
-
         // for {"string"|test} syntax there is simpler way
         if ($isString)
             $body = $this->parseModifiers($function);
@@ -1698,9 +1672,6 @@ class Parser
 
         // prefix, example: $value1, $value2 etc. by default should be just $value
         $valuesPrefix = intval($tagData['level']);
-
-        // check variable black list
-        $this->blackList($var);
 
         // replace array modificators eg. $array.test to $array["test"]
         $newvar = $this->varReplace($var, ($valuesPrefix - 1), false, false, true);
@@ -1858,40 +1829,6 @@ class Parser
     }
 
     /**
-     * This function should be removed and a sandboxing plugin should be created in its place
-     *
-     * @deprecated
-     * @param $html
-     * @return bool
-     */
-    protected function blackList($html)
-    {
-        if (!$this->getConfigurationKey('sandbox') || !$this->blackList)
-            return true;
-
-        if (!$this->getConfigurationKey('black_list_preg'))
-            $this->setConfigurationKey('black_list_preg', '#[\W\s]*' . implode('[\W\s]*|[\W\s]*', $this->blackList) . '[\W\s]*#');
-
-        // check if the function is in the black list (or not in white list)
-        if (preg_match($this->getConfigurationKey('black_list_preg'), $html, $match)) {
-
-            // find the line of the error
-            $line = 0;
-            $rows = explode("\n", $this->templateInfo['code']);
-            while (!strpos($rows[$line], $html) && $line + 1 < count($rows))
-                $line++;
-
-            // stop the execution of the script
-            $e = new SyntaxException('Syntax ' . $match[0] . ' not allowed in template: ' . $this->templateInfo['template_filepath'] . ' at line ' . $line, 5);
-            throw $e->templateFile($this->templateInfo['template_filepath'])
-                ->tag($match[0])
-                ->templateLine($line);
-
-            return false;
-        }
-    }
-
-    /**
      * Parse modifiers on a string or variable, function
      *
      * @param string $var Variable/string/function input string
@@ -1911,9 +1848,6 @@ class Parser
         {
             if ($function === $result)
                 continue;
-
-            // security
-            $this->blackList($function);
 
             // arguments
             $args = explode(':', str_replace('::', '\@;;', $function));
