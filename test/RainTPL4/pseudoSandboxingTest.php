@@ -9,23 +9,45 @@ class pseudoSandboxingTest extends RainTPLTestCase
     /**
      * Base test
      *
+     * @expectedException Rain\RestrictedException
      * @author Damian Kęska <damian@pantheraframework.org>
      */
     public function testWhitelist()
     {
-        $result = '';
         $this->setupRainTPL4();
+        $this->engine->setConfigurationKey('sandboxMode', 'whitelist');
         $this->engine->setConfigurationKey('pluginsEnabled', array(
             'pseudoSandboxing',
         ));
 
+        $this->engine->drawString('{shell_exec("ls -la")}', true);
+    }
 
-        try {
-            $this->engine->drawString('{shell_exec("ls -la")}', true);
-        } catch (Exception $e) {
-            $result = get_class($e);
-        }
+    /**
+     * Blacklist test
+     *
+     * @expectedException Rain\RestrictedException
+     * @author Damian Kęska <damian@pantheraframework.org>
+     */
+    public function testBlacklist()
+    {
+        $this->setupRainTPL4();
 
-        $this->assertEquals('Rain\RestrictedException', $result);
+        // add our testing method to whitelist to make sure the whitelist will not be used instead of blacklist
+        $whitelist = $this->engine->getConfigurationKey('sandboxWhitelist');
+        $whitelist[] = 'shell_exec';
+
+        // configure blacklist
+        $blacklist = $this->engine->getConfigurationKey('sandboxBlacklist');
+        $blacklist[] = 'shell_exec';
+
+        $this->engine->setConfigurationKey('sandboxWhitelist', $whitelist);
+        $this->engine->setConfigurationKey('sandboxBlacklist', $blacklist);
+        $this->engine->setConfigurationKey('sandboxMode', 'blacklist');
+        $this->engine->setConfigurationKey('pluginsEnabled', array(
+            'pseudoSandboxing',
+        ));
+
+        $this->engine->drawString('{shell_exec("ls -la")}', true);
     }
 }

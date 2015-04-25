@@ -63,7 +63,9 @@ class pseudoSandboxing extends Rain\Tpl\RainTPL4Plugin
             $whitelist = $this->engine->getConfigurationKey('sandboxWhitelist');
 
             if (!is_array($whitelist))
+            {
                 throw new Rain\InvalidConfiguration('Missing configuration key "sandboxWhitelist", please set it using setConfigurationKey in RainTPL', 2);
+            }
 
             foreach ($collector->calledFunctions as $functionName => $count)
             {
