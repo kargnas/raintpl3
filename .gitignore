@@ -2,3 +2,4 @@
 nbproject
 vendor/*
 test/cache/*
+composer.lock
