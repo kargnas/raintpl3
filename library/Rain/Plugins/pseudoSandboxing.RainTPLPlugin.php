@@ -13,7 +13,9 @@ class pseudoSandboxing extends Rain\Tpl\RainTPL4Plugin
     {
         $libDir = null;
 
-        if (is_dir(__DIR__. '/../../../vendor/PHP-Parser'))
+        if (is_dir(__DIR__. '/../../../vendor/nikic/php-parser'))
+            $libDir = __DIR__. '/../../../vendor/nikic/php-parser';
+        elseif (is_dir(__DIR__. '/../../../vendor/PHP-Parser'))
             $libDir = __DIR__. '/../../../vendor/PHP-Parser';
         elseif (is_dir(__DIR__. '../share/PHP-Parser'))
             $libDir = __DIR__. '../share/PHP-Parser';
