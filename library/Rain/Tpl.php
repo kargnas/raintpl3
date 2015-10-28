@@ -14,6 +14,7 @@ class Tpl {
 
     // variables
     public $var = array();
+    static $compileTime = 0;
 
     protected $config = array(),
         $objectConf = array();
@@ -239,7 +240,7 @@ class Tpl {
      * @return string: full filepath that php must use to include
      */
     protected function checkTemplate($template) {
-        static $parsingTime = 0;
+        $time = microtime(true);
 
         // set filename
         $templateName = basename($template);
@@ -277,9 +278,9 @@ class Tpl {
         if ($this->config['debug'] || !file_exists($parsedTemplateFilepath) || ( filemtime($parsedTemplateFilepath) < filemtime($templateFilepath) )) {
             $parser = new Tpl\Parser($this->config, static::$plugins, static::$registered_tags);
             $parser->compileFile($templateName, $templateBasedir, $templateDirectory, $templateFilepath, $parsedTemplateFilepath);
-            $parsingTime += microtime(true) - $time;
+	        static::$compileTime += microtime(true) - $time;
             if (function_exists('PLog')) {
-                PLog("TPL Parsed and compiled.. ({$template}) (총 {$parsingTime}초)", ['class' => $this, 'method' => __METHOD__, 'time' => $time]);
+	            PLog("TPL Parsed and compiled.. ({$templateFilepath})({$template}) (총 " . static::$compileTime . "초)", ['class' => $this, 'method' => __METHOD__, 'time' => $time]);
             }
         }
         return $parsedTemplateFilepath;
