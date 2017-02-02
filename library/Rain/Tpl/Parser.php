@@ -188,46 +188,48 @@ class Parser {
         $fp = fopen($templateFilepath, "r");
 
         // lock the file
-        if (flock($fp, LOCK_EX)) {
+	    // 원래 flock 성공해야 아래 로직 실행되도록 되어 있었는데, 해외서버 NFS에서 Lock 이 불가능해서 if 문을 푼다.
+        flock($fp, LOCK_EX);
 
-            // save the filepath in the info
-            $this->templateInfo['template_filepath'] = $templateFilepath;
+        // save the filepath in the info
+        $this->templateInfo['template_filepath'] = $templateFilepath;
 
-            // read the file
-            $this->templateInfo['code'] = $code = fread($fp, filesize($templateFilepath));
+        // read the file
+        $this->templateInfo['code'] = $code = fread($fp, filesize($templateFilepath));
 
-            // xml substitution
-            $code = preg_replace("/<\?xml(.*?)\?>/s", /*<?*/ "##XML\\1XML##", $code);
+        // xml substitution
+        $code = preg_replace("/<\?xml(.*?)\?>/s", /*<?*/ "##XML\\1XML##", $code);
 
-            // disable php tag
-            if (!$this->config['php_enabled'])
-                $code = str_replace(array("<?", "?>"), array("&lt;?", "?&gt;"), $code);
+        // disable php tag
+        if (!$this->config['php_enabled'])
+            $code = str_replace(array("<?", "?>"), array("&lt;?", "?&gt;"), $code);
 
-            // xml re-substitution
-            $code = preg_replace_callback("/##XML(.*?)XML##/s", function( $match ) {
-                    return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
-                }, $code);
+        // xml re-substitution
+        $code = preg_replace_callback("/##XML(.*?)XML##/s", function( $match ) {
+                return "<?php echo '<?xml " . stripslashes($match[1]) . " ?>'; ?>";
+            }, $code);
 
-            $parsedCode = $this->compileTemplate($code, $isString = false, $templateBasedir, $templateDirectory, $templateFilepath);
-            $parsedCode = "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
+        $parsedCode = $this->compileTemplate($code, $isString = false, $templateBasedir, $templateDirectory, $templateFilepath);
+        $parsedCode = "<?php if(!class_exists('Rain\Tpl')){exit;}?>" . $parsedCode;
 
-            // fix the php-eating-newline-after-closing-tag-problem
-            $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
+        // fix the php-eating-newline-after-closing-tag-problem
+        $parsedCode = str_replace("?>\n", "?>\n\n", $parsedCode);
 
-            // create directories
-            if (!is_dir($this->config['cache_dir']))
-                mkdir($this->config['cache_dir'], 0755, TRUE);
+        // create directories
+        if (!is_dir($this->config['cache_dir']))
+            mkdir($this->config['cache_dir'], 0755, TRUE);
 
-            // check if the cache is writable
-            if (!is_writable($this->config['cache_dir']))
-                throw new Exception('Cache directory ' . $this->config['cache_dir'] . 'doesn\'t have write permission. Set write permission or set RAINTPL_CHECK_TEMPLATE_UPDATE to FALSE. More details on http://www.raintpl.com/Documentation/Documentation-for-PHP-developers/Configuration/');
+        // check if the cache is writable
+        if (!is_writable($this->config['cache_dir']))
+            throw new Exception('Cache directory ' . $this->config['cache_dir'] . 'doesn\'t have write permission. Set write permission or set RAINTPL_CHECK_TEMPLATE_UPDATE to FALSE. More details on http://www.raintpl.com/Documentation/Documentation-for-PHP-developers/Configuration/');
 
-            // write compiled file
-            file_put_contents($parsedTemplateFilepath, $parsedCode);
-
-            // release the file lock
-            flock($fp, LOCK_UN);
+        // write compiled file
+        if (!file_put_contents($parsedTemplateFilepath, $parsedCode)) {
+            throw new Exception("Failed to put file: {$parsedTemplateFilepath}");
         }
+
+        // release the file lock
+        flock($fp, LOCK_UN);
 
         // close the file
         fclose($fp);
